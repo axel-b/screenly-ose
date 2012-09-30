@@ -7,6 +7,11 @@ __license__ = "Dual License: GPLv2 and Commercial License"
 __version__ = "0.1.2"
 __email__ = "vpetersson@wireload.net"
 
+# very trivial initial password list, just to get this going;
+# should we ask the user to provide a password in an initial screen,
+# and then save it to file, for subsequent use?
+passwds = { 'guest':'guest', }
+
 import sqlite3, ConfigParser
 from netifaces import ifaddresses
 from sys import exit, platform
@@ -15,12 +20,17 @@ from os import path, getenv, makedirs, getloadavg, statvfs
 from hashlib import md5
 from json import dumps, loads 
 from datetime import datetime, timedelta
-from bottle import route, run, debug, template, request, validate, error, static_file, get
+from bottle import route, run, debug, template, request, validate, error, static_file, get, redirect
 from dateutils import datestring
 from StringIO import StringIO
 from PIL import Image
 from urlparse import urlparse
 from hurry.filesize import size
+import bottlesession
+
+# Initialize session manager
+session_manager = bottlesession.MemorySession()
+valid_user = bottlesession.authenticator(session_manager)
 
 # Get config file
 config = ConfigParser.ConfigParser()
@@ -141,9 +151,60 @@ def initiate_db():
     if not asset_table:
         c.execute("CREATE TABLE assets (asset_id TEXT, name TEXT, uri TEXT, md5 TEXT, start_date TIMESTAMP, end_date TIMESTAMP, duration TEXT, mimetype TEXT)")
         return "Initiated database."
-    
+
+@route('/auth/login', method='POST')
+@route('/auth/login', method='GET')
+def login():
+    username = request.POST.get('username')
+    password = request.POST.get('password')
+
+    #if (request.POST.get('name','').strip() and
+    #    request.POST.get('password','').strip()
+    #    ):
+    #
+    #    name =  request.POST.get('name','').strip()
+    #    password = request.POST.get('password','').strip()
+    #    if (name, password) == ('rott', 'hackme'):
+    #           return template('index')
+    #
+    # return template('login')
+
+    if not username or not password:
+        message = "Please specify username and password"
+        return template('login', message=message, error='')
+
+    session = session_manager.get_session()
+    session['valid'] = False
+
+    if password and passwds.get(username) == password:
+        session['valid'] = True
+        session['name'] = username
+
+    session_manager.save(session)
+
+    if not session['valid']:
+        error = "Username or password is invalid"
+        return template('login', message='', error=error)
+
+    redirpath = request.get_cookie('validuserloginredirect')
+    redirect(redirpath)
+
+
+@route('/auth/logout')
+@valid_user()
+def logout():
+    # actually, instead of marking session as invalid, we should just delete it
+    # unfortunately, the session manager does not allow us to do that (yet?)
+    session = session_manager.get_session()
+    session['valid'] = False
+    session_manager.save(session)
+    redirect('/auth/login')
+
+
 @route('/process_asset', method='POST')
+@valid_user()
 def process_asset():
+    username = request.environ['REMOTE_USER']
 
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
@@ -162,7 +223,7 @@ def process_asset():
         if not (uri_check.scheme == "http" or uri_check.scheme == "https"):
             header = "Ops!"
             message = "URL must be HTTP or HTTPS."
-            return template('message', header=header, message=message)
+            return template('message', header=header, message=message, username=username)
 
         file = req_get(uri)
 
@@ -189,19 +250,21 @@ def process_asset():
             
             header = "Yay!"
             message =  "Added asset (" + asset_id + ") to the database."
-            return template('message', header=header, message=message)
+            return template('message', header=header, message=message, username=username)
             
         else:
             header = "Ops!"
             message = "Unable to fetch file."
-            return template('message', header=header, message=message)
+            return template('message', header=header, message=message, username=username)
     else:
         header = "Ops!"
         message = "Invalid input."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
 
 @route('/process_schedule', method='POST')
+@valid_user()
 def process_schedule():
+    username = request.environ['REMOTE_USER']
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
 
@@ -226,7 +289,7 @@ def process_schedule():
             except:
                 header = "Ops!"
                 message = "Duration missing. This is required for images and web-pages."
-                return template('message', header=header, message=message)
+                return template('message', header=header, message=message, username=username)
         else:
             duration = "N/A"
 
@@ -235,15 +298,17 @@ def process_schedule():
         
         header = "Yes!"
         message = "Successfully scheduled asset."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
         
     else:
         header = "Ops!"
         message = "Failed to process schedule."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
 
 @route('/update_asset', method='POST')
+@valid_user()
 def update_asset():
+    username = request.environ['REMOTE_USER']
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
 
@@ -280,16 +345,18 @@ def update_asset():
 
         header = "Yes!"
         message = "Successfully updated asset."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
 
     else:
         header = "Ops!"
         message = "Failed to update asset."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
 
 
 @route('/delete_asset/:asset_id')
+@valid_user()
 def delete_asset(asset_id):
+    username = request.environ['REMOTE_USER']
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
     
@@ -299,20 +366,24 @@ def delete_asset(asset_id):
         
         header = "Success!"
         message = "Deleted asset."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
     except:
         header = "Ops!"
         message = "Failed to delete asset."
-        return template('message', header=header, message=message)
+        return template('message', header=header, message=message, username=username)
 
 @route('/')
+@valid_user()
 def viewIndex():
+    username = request.environ['REMOTE_USER']
     initiate_db()
-    return template('index')
+    return template('index', username=username)
 
 
 @route('/system_info')
+@valid_user()
 def system_info():
+    username = request.environ['REMOTE_USER']
     viewer_log_file = '/tmp/screenly_viewer.log'
     if path.exists(viewer_log_file):
         f = open(viewer_log_file, 'r')
@@ -332,7 +403,7 @@ def system_info():
         uptime_seconds = float(f.readline().split()[0])
         uptime = str(timedelta(seconds = uptime_seconds))
 
-    return template('system_info', viewlog=viewlog, loadavg=loadavg, free_space=free_space, uptime=uptime)
+    return template('system_info', viewlog=viewlog, loadavg=loadavg, free_space=free_space, uptime=uptime, username=username)
 
 @route('/splash_page')
 def splash_page():
@@ -346,27 +417,35 @@ def splash_page():
 
 
 @route('/view_playlist')
+@valid_user()
 def view_node_playlist():
+    username = request.environ['REMOTE_USER']
 
     nodeplaylist = loads(get_playlist())
     
-    return template('view_playlist', nodeplaylist=nodeplaylist)
+    return template('view_playlist', nodeplaylist=nodeplaylist, username=username)
 
 @route('/view_assets')
+@valid_user()
 def view_assets():
+    username = request.environ['REMOTE_USER']
 
     nodeplaylist = loads(get_assets())
     
-    return template('view_assets', nodeplaylist=nodeplaylist)
+    return template('view_assets', nodeplaylist=nodeplaylist, username=username)
 
 
 @route('/add_asset')
+@valid_user()
 def add_asset():
-    return template('add_asset')
+    username = request.environ['REMOTE_USER']
+    return template('add_asset', username=username)
 
 
 @route('/schedule_asset')
+@valid_user()
 def schedule_asset():
+    username = request.environ['REMOTE_USER']
     
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
@@ -383,10 +462,12 @@ def schedule_asset():
             'asset_id' : asset_id,
         })
 
-    return template('schedule_asset', assets=assets)
+    return template('schedule_asset', assets=assets, username=username)
         
 @route('/edit_asset/:asset_id')
+@valid_user()
 def edit_asset(asset_id):
+    username = request.environ['REMOTE_USER']
 
     conn = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES)
     c = conn.cursor()
@@ -421,7 +502,7 @@ def edit_asset(asset_id):
             "end_date" : end_date
             }
     #return str(asset_info)
-    return template('edit_asset', asset_info=asset_info)
+    return template('edit_asset', asset_info=asset_info, username=username)
         
 # Static
 @route('/static/:path#.+#', name='static')

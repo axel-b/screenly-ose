@@ -59,6 +59,10 @@ strong {
     color: #EBEBEB;
 }
 
+strong.error {
+    color: #EB0000;
+}
+
 ul {
 	color:#FFFFFF;
 }

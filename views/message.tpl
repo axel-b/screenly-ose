@@ -7,5 +7,7 @@
     <p>{{message}}</p>
     <div class="footer">
     <a href="/">Back</a>
+    <br/>
+    <a href="/auth/logout">Logout</a> {{username}}
     </div>
 </body>
