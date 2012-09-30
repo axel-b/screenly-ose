@@ -7,11 +7,6 @@ __license__ = "Dual License: GPLv2 and Commercial License"
 __version__ = "0.1.2"
 __email__ = "vpetersson@wireload.net"
 
-# very trivial initial password list, just to get this going;
-# should we ask the user to provide a password in an initial screen,
-# and then save it to file, for subsequent use?
-passwds = { 'guest':'guest', }
-
 import sqlite3, ConfigParser
 from netifaces import ifaddresses
 from sys import exit, platform
@@ -32,8 +27,13 @@ import bottlesession
 session_manager = bottlesession.MemorySession()
 valid_user = bottlesession.authenticator(session_manager)
 
+# very trivial default credentials, in case nothing is set up in config file
+# should we ask the user to provide a password in an initial screen,
+# and then save it to (config?) file, for subsequent use?
+default_config_credentials = {'username':'guest', 'password':'guest'}
+
 # Get config file
-config = ConfigParser.ConfigParser()
+config = ConfigParser.ConfigParser(default_config_credentials)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     print 'Config-file missing.'
@@ -45,6 +45,10 @@ else:
 configdir = path.join(getenv('HOME'), config.get('main', 'configdir'))
 database = path.join(getenv('HOME'), config.get('main', 'database'))
 nodetype = config.get('main', 'nodetype')
+
+username = config.get('main', 'username')
+password = config.get('main', 'password')
+credentials = { username:password, }
 
 def time_lookup():
     if nodetype == "standalone":
@@ -176,7 +180,7 @@ def login():
     session = session_manager.get_session()
     session['valid'] = False
 
-    if password and passwds.get(username) == password:
+    if password and credentials.get(username) == password:
         session['valid'] = True
         session['name'] = username
 
