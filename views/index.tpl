@@ -19,7 +19,9 @@
         <p>
     </div>
     <div class="footer">
+    % if username != None:
         <p><a href="/auth/logout">Logout</a> {{username}}</p>
+    %end
         <em>Brought to you by <a href="http://wireload.net">WireLoad</a>.</em>
     </div>
 </body>

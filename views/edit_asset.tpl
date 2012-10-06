@@ -85,7 +85,9 @@
         </div>
         <div class="footer">
             <a href="/">Back</a>
+        % if username != None:
 	    <br/>
             <a href="/auth/logout">Logout</a> {{username}}
+        % end
         </div>
 </body>

@@ -23,17 +23,11 @@ from urlparse import urlparse
 from hurry.filesize import size
 import bottlesession
 
-# Initialize session manager
-session_manager = bottlesession.MemorySession()
-valid_user = bottlesession.authenticator(session_manager)
-
-# very trivial default credentials, in case nothing is set up in config file
-# should we ask the user to provide a password in an initial screen,
-# and then save it to (config?) file, for subsequent use?
-default_config_credentials = {'username':'guest', 'password':'guest'}
+# when no credentials are given in config, the web interface will not ask for them
+config_defaults = {'username':'', 'password':''}
 
 # Get config file
-config = ConfigParser.ConfigParser(default_config_credentials)
+config = ConfigParser.ConfigParser(config_defaults)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     print 'Config-file missing.'
@@ -49,6 +43,18 @@ nodetype = config.get('main', 'nodetype')
 username = config.get('main', 'username')
 password = config.get('main', 'password')
 credentials = { username:password, }
+
+# Initialize session manager
+if not username or not password:
+    print 'Not using authentication in web interface.'
+    print 'To enable authentication in web interface,'
+    print ' specify both a username and a password in the config-file.'
+    session_manager = bottlesession.PreconfiguredSession({'valid':True, 'name': ''})
+else:
+    session_manager = bottlesession.MemorySession()
+    print 'Using authentication in web interface.'
+valid_user = bottlesession.authenticator(session_manager)
+    
 
 def time_lookup():
     if nodetype == "standalone":
