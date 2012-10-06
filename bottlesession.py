@@ -33,6 +33,8 @@ def authenticator(session_manager, login_url = '/auth/login'):
 				#  set environment
 				if data.get('name'):
 					bottle.request.environ['REMOTE_USER'] = data['name']
+                                else:
+					bottle.request.environ['REMOTE_USER'] = None
 
 				return handler(*a, **ka)
 			return check_auth
@@ -125,6 +127,24 @@ class MemorySession(BaseSession):
 		sessionid = data['sessionid']
 		self.sessions[sessionid] = data
 
+class PreconfiguredSession(BaseSession):
+	'''Class which always returns same session data, given in initializer.
+
+	:param session_data: the session data to return, always.
+			(default: None)
+	'''
+	def __init__(self, session_data = None, *args, **kwargs):
+		super(PreconfiguredSession, self).__init__(*args, **kwargs)
+                self.session_data = session_data
+
+	def get_session(self):
+		return self.session_data
+
+	def load(self, sessionid):
+		return self.session_data
+
+	def save(self, data):
+		self.session_data = data
 
 class CookieSession(BaseSession):
 	'''Session manager class which stores session in a signed browser cookie.
