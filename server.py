@@ -49,7 +49,7 @@ if not username or not password:
     print 'Not using authentication in web interface.'
     print 'To enable authentication in web interface,'
     print ' specify both a username and a password in the config-file.'
-    session_manager = bottlesession.PreconfiguredSession({'valid':True, 'name': ''})
+    session_manager = bottlesession.PreconfiguredSession({'valid':True, 'name': '', 'new': False})
 else:
     session_manager = bottlesession.MemorySession()
     print 'Using authentication in web interface.'
@@ -179,12 +179,16 @@ def login():
     #
     # return template('login')
 
+    session = session_manager.get_session()
+    session['valid'] = False
+
+    if request.method == 'POST' and session['new']:
+        message = "Cookies must be enabled to be able to authenticate."
+        return template('login', message=message, error='')
+
     if not username or not password:
         message = "Please specify username and password"
         return template('login', message=message, error='')
-
-    session = session_manager.get_session()
-    session['valid'] = False
 
     if password and credentials.get(username) == password:
         session['valid'] = True
