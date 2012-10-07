@@ -79,10 +79,14 @@ class BaseSession(object):
 			bottle.response.set_cookie('sessionid', sessionid,
 					path = '/')
 
-		#  load existing or create new session
+		#  load existing or create new session;
+		#  field 'new' indicates which of these two happened
 		data = self.load(sessionid)
 		if not data:
-			data = { 'sessionid' : sessionid, 'valid' : False }
+			data = { 'sessionid' : sessionid, 'valid' : False, 'new': True }
+			self.save(data)
+		else:
+			data['new'] = False
 			self.save(data)
 
 		return data
