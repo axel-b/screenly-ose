@@ -1,3 +1,3 @@
 [submodule "bottlesession"]
 	path = bottlesession
-	url = https://github.com/axel-b/bottlesession.git
+	url = git://github.com/axel-b/bottlesession.git
