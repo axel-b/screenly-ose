@@ -13,7 +13,8 @@ from requests import get
 from platform import machine 
 from os import path, getenv, remove, makedirs
 from os import stat as os_stat
-from subprocess import Popen, call 
+#from subprocess import Popen, call 
+import subprocess
 import html_templates
 from datetime import datetime
 from time import sleep, time
@@ -55,6 +56,49 @@ def str_to_bol(string):
         return True
     else:
         return False
+
+class Fader(object):
+    # FIXME we only look at stdout of fade program;
+    # instead, we should also watch its stderr.
+    # moreover, what if something goes wrong and we hang forever in readline() ?
+    # should we use a timer to be robust against that?
+    def __init__(self):
+        fader_args = [fader_bin]
+        self.fader = subprocess.Popen(fader_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    def fade_to(self, color):
+        if color == 'white':
+            self.fade_to_white()
+        elif color == 'black':
+            self.fade_to_black()
+        else:
+            # FIXME give error message?
+            self.fade_to_black()
+
+    def fade_to_black(self):
+        if not self.fader:
+                return
+        self.fader.stdin.write('fade-to-black\n')
+        self.fader.stdin.flush()
+        l = self.fader.stdout.readline()
+        logging.debug('fade_to_black read "%s"' % l)
+
+    def fade_to_white(self):
+        if not self.fader:
+                return
+        self.fader.stdin.write('fade-to-white\n')
+        self.fader.stdin.flush()
+        l = self.fader.stdout.readline()
+        logging.debug('fade_to_white read "%s"' % l)
+
+    def fade_out(self):
+        if not self.fader:
+                return
+        self.fader.stdin.write('fade-out\n')
+        self.fader.stdin.flush()
+        l = self.fader.stdout.readline()
+        logging.debug('fade_out read "%s"' % l)
+
 
 class Scheduler(object):
     def __init__(self, *args, **kwargs):
@@ -146,10 +190,25 @@ def generate_asset_list():
     if shuffle_playlist:
         from random import shuffle
         shuffle(playlist)
+
+    # associate fade-(out-)color with each asset in playlist,
+    # based on the mime-type of the asset succeding (after) it;
+    # we might allow user to associate colors with assets in web-interface,
+    # for now: all video: black; anything else: white
+    i = 0
+    nplaylist = len(playlist)
+    while i < nplaylist:
+        if "video" in playlist[(i+1)%nplaylist]['mimetype']:
+            playlist[i]['fade-color'] = 'black'
+        else:
+            playlist[i]['fade-color'] = 'white'
+        i = i + 1
     
     return (playlist, deadline)
     
 def load_browser():
+    global fader
+
     logging.info('Loading browser...')
     browser_bin = "uzbl-browser"
     browser_resolution = resolution
@@ -160,13 +219,15 @@ def load_browser():
         browser_load_url = black_page
 
     browser_args = [browser_bin, "--geometry=" + browser_resolution, "--uri=" + browser_load_url]
-    browser = Popen(browser_args)
+    browser = subprocess.Popen(browser_args)
     
     logging.info('Browser loaded. Running as PID %d.' % browser.pid)
 
     if show_splash:
         # Show splash screen for 60 seconds.
+        fader.fade_out()
         sleep(60)
+        fader.fade_to_black()
     else:
         # Give browser some time to start (we have seen multiple uzbl running without this)
         sleep(10)
@@ -188,28 +249,42 @@ def disable_browser_status():
     f.close()
 
 
-def view_image(image, name, duration):
+def view_image(image, name, duration, fade_color):
+    global fader
+
     logging.debug('Displaying image %s for %s seconds.' % (image, duration))
     url = html_templates.image_page(image, name)
     f = open(fifo, 'a')
     f.write('set uri = %s\n' % url)
     f.close()
-    
+   
+    # allow time for image to be loaded 
+    sleep(3)
+    fader.fade_out()
+
     sleep(int(duration))
     
+    fader.fade_to(fade_color)
+
     f = open(fifo, 'a')
     f.write('set uri = %s\n' % black_page)
     f.close()
     
-def view_video(video):
+def view_video(video, fade_color):
+    global fader
+
     arch = machine()
+
+    # give web viewer time to put up black background
+    sleep(2)
+    fader.fade_out()
 
     ## For Raspberry Pi
     if arch == "armv6l":
         logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % video)
         omxplayer = "omxplayer"
         omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(video)]
-        run = call(omxplayer_args, stdout=True)
+        run = subprocess.call(omxplayer_args, stdout=True)
         logging.debug(run)
 
         if run != 0:
@@ -224,11 +299,14 @@ def view_video(video):
     elif arch == "x86_64" or arch == "x86_32":
         logging.debug('Displaying video %s. Detected x86. Using mplayer.' % video)
         mplayer = "mplayer"
-        run = call([mplayer, "-fs", "-nosound", str(video) ], stdout=False)
+        run = subprocess.call([mplayer, "-fs", "-nosound", str(video) ], stdout=False)
         if run != 0:
             logging.debug("Unclean exit: " + str(run))
 
-def view_web(url, duration):
+    fader.fade_to(fade_color)
+
+def view_web(url, duration, fade_color):
+    global fader
 
     # If local web page, check if the file exist. If remote, check if it is
     # available.
@@ -243,8 +321,13 @@ def view_web(url, duration):
         f = open(fifo, 'a')
         f.write('set uri = %s\n' % url)
         f.close()
+
+        sleep(3)
+        fader.fade_out()
     
         sleep(int(duration))
+
+        fader.fade_to(fade_color)
     
         f = open(fifo, 'a')
         f.write('set uri = %s\n' % black_page)
@@ -274,6 +357,15 @@ if not path.isdir(html_folder):
 # Set up HTML templates
 black_page = html_templates.black_page()
 
+# FIXME do not hardcode fader executable location
+fader_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
+fader = Fader()
+
+# FIXME specify fader timing here, or via config,
+# instead of hard-coded in the view_foo functions, as it is now.
+
+fader.fade_to_black()
+
 # Fire up the browser
 run_browser = load_browser()
 
@@ -285,7 +377,7 @@ fifo = get_fifo()
 
 # Bring up the blank page (in case there are only videos).
 logging.debug('Loading blank page.')
-view_web(black_page, 1)
+view_web(black_page, 1, 'white')
 
 logging.debug('Disable the browser status bar')
 disable_browser_status()
@@ -307,10 +399,10 @@ while True:
         logging.info('show asset %s' % asset["name"])
 
         if "image" in asset["mimetype"]:
-            view_image(asset["uri"], asset["name"], asset["duration"])
+            view_image(asset["uri"], asset["name"], asset["duration"], asset["fade-color"])
         elif "video" in asset["mimetype"]:
-            view_video(asset["uri"])
+            view_video(asset["uri"], asset["fade-color"])
         elif "web" in asset["mimetype"]:
-            view_web(asset["uri"], asset["duration"])
+            view_web(asset["uri"], asset["duration"], asset["fade-color"])
         else:
             print "Unknown MimeType, or MimeType missing"
