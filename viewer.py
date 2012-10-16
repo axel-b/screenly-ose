@@ -207,8 +207,6 @@ def generate_asset_list():
     return (playlist, deadline)
     
 def load_browser():
-    global fader
-
     logging.info('Loading browser...')
     browser_bin = "uzbl-browser"
     browser_resolution = resolution
@@ -250,8 +248,6 @@ def disable_browser_status():
 
 
 def view_image(image, name, duration, fade_color):
-    global fader
-
     logging.debug('Displaying image %s for %s seconds.' % (image, duration))
     url = html_templates.image_page(image, name)
     f = open(fifo, 'a')
@@ -259,7 +255,7 @@ def view_image(image, name, duration, fade_color):
     f.close()
    
     # allow time for image to be loaded 
-    sleep(3)
+    sleep(2.5)
     fader.fade_out()
 
     sleep(int(duration))
@@ -271,8 +267,6 @@ def view_image(image, name, duration, fade_color):
     f.close()
     
 def view_video(video, fade_color):
-    global fader
-
     arch = machine()
 
     # give web viewer time to put up black background
@@ -306,8 +300,6 @@ def view_video(video, fade_color):
     fader.fade_to(fade_color)
 
 def view_web(url, duration, fade_color):
-    global fader
-
     # If local web page, check if the file exist. If remote, check if it is
     # available.
     if (html_folder in url and path.exists(url)):
@@ -322,7 +314,7 @@ def view_web(url, duration, fade_color):
         f.write('set uri = %s\n' % url)
         f.close()
 
-        sleep(3)
+        sleep(2.5)
         fader.fade_out()
     
         sleep(int(duration))
