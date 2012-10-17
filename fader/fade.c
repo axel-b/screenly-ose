@@ -301,6 +301,9 @@ void disconnect(RECT_VARS_T *vars)
     ret = vc_dispmanx_display_close( vars->display );
     assert( ret == 0 );
 
+    free(vars->image);
+    vars->image = 0;
+
     vars->connected = 0;
 }
 
