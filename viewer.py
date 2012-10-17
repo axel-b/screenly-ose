@@ -57,14 +57,14 @@ def str_to_bol(string):
     else:
         return False
 
-class Fader(object):
+class Shutter(object):
     # FIXME we only look at stdout of fade program;
     # instead, we should also watch its stderr.
     # moreover, what if something goes wrong and we hang forever in readline() ?
     # should we use a timer to be robust against that?
     def __init__(self):
-        fader_args = [fader_bin]
-        self.fader = subprocess.Popen(fader_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        shutter_args = [shutter_bin]
+        self.shutter = subprocess.Popen(shutter_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     def fade_to(self, color):
         if color == 'white':
@@ -76,28 +76,28 @@ class Fader(object):
             self.fade_to_black()
 
     def fade_to_black(self):
-        if not self.fader:
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-to-black\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
+        self.shutter.stdin.write('fade-to-black\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
         logging.debug('fade_to_black read "%s"' % l)
 
     def fade_to_white(self):
-        if not self.fader:
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-to-white\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
+        self.shutter.stdin.write('fade-to-white\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
         logging.debug('fade_to_white read "%s"' % l)
 
-    def fade_out(self):
-        if not self.fader:
+    def fade_in(self):
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-out\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
-        logging.debug('fade_out read "%s"' % l)
+        self.shutter.stdin.write('fade-in\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        logging.debug('fade_in read "%s"' % l)
 
 
 class Scheduler(object):
@@ -223,9 +223,9 @@ def load_browser():
 
     if show_splash:
         # Show splash screen for 60 seconds.
-        fader.fade_out()
+        shutter.fade_in()
         sleep(60)
-        fader.fade_to_black()
+        shutter.fade_to_black()
     else:
         # Give browser some time to start (we have seen multiple uzbl running without this)
         sleep(10)
@@ -256,11 +256,11 @@ def view_image(image, name, duration, fade_color):
    
     # allow time for image to be loaded 
     sleep(2.5)
-    fader.fade_out()
+    shutter.fade_in()
 
     sleep(int(duration))
     
-    fader.fade_to(fade_color)
+    shutter.fade_to(fade_color)
 
     f = open(fifo, 'a')
     f.write('set uri = %s\n' % black_page)
@@ -271,7 +271,7 @@ def view_video(video, fade_color):
 
     # give web viewer time to put up black background
     sleep(2)
-    fader.fade_out()
+    shutter.fade_in()
 
     ## For Raspberry Pi
     if arch == "armv6l":
@@ -297,7 +297,7 @@ def view_video(video, fade_color):
         if run != 0:
             logging.debug("Unclean exit: " + str(run))
 
-    fader.fade_to(fade_color)
+    shutter.fade_to(fade_color)
 
 def view_web(url, duration, fade_color):
     # If local web page, check if the file exist. If remote, check if it is
@@ -315,11 +315,11 @@ def view_web(url, duration, fade_color):
         f.close()
 
         sleep(2.5)
-        fader.fade_out()
+        shutter.fade_in()
     
         sleep(int(duration))
 
-        fader.fade_to(fade_color)
+        shutter.fade_to(fade_color)
     
         f = open(fifo, 'a')
         f.write('set uri = %s\n' % black_page)
@@ -349,14 +349,14 @@ if not path.isdir(html_folder):
 # Set up HTML templates
 black_page = html_templates.black_page()
 
-# FIXME do not hardcode fader executable location
-fader_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
-fader = Fader()
+# FIXME do not hardcode shutter executable location
+shutter_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
+shutter = Shutter()
 
-# FIXME specify fader timing here, or via config,
+# FIXME specify shutter timing here, or via config,
 # instead of hard-coded in the view_foo functions, as it is now.
 
-fader.fade_to_black()
+shutter.fade_to_black()
 
 # Fire up the browser
 run_browser = load_browser()

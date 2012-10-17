@@ -88,8 +88,8 @@ float delay = 2; // totalTime/2;
 float step = .05 / 128; // ((totalTime-delay)/2)/256;
 //float step = .05 / 256; // ((totalTime-delay)/2)/256;
 
-void fade_in(RECT_VARS_T *vars, int color);
-void fade_out(RECT_VARS_T *vars);
+void fade_out(RECT_VARS_T *vars, int color);
+void fade_in(RECT_VARS_T *vars);
 void disconnect(RECT_VARS_T *vars);
 
 int main(int argc, char**argv)
@@ -111,15 +111,15 @@ int main(int argc, char**argv)
 //     case  fade-to-black:
 //	     open-display
 //           create frame(black)
-//           fade in
+//           decrease transparency (opacity) till we have solid color
 //           write ack
 //     case  fade-to-white:
 //	     open-display
 //           create frame(white)
-//           fade in
+//           decrease transparency (opacity) till we have solid color
 //           write ack
-//     case  fade-out:
-//           fade out
+//     case  fade-in:
+//           increase transparency (opacity) till we have full transparency
 //           delete frame
 //           close display
 //           write ack
@@ -137,18 +137,18 @@ int main(int argc, char**argv)
 	if (s == NULL && feof(stdin))
 		break;
 
-	if (strncmp(s, "fade-out", strlen("fade-out")) == 0) {
-		fade_out(vars);
+	if (strncmp(s, "fade-in", strlen("fade-in")) == 0) {
+		fade_in(vars);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
 	} else if (strncmp(s, "fade-to-white", strlen("fade-to-white")) == 0) {
 		int color = 0xFFFF; //white
-		fade_in(vars, color);
+		fade_out(vars, color);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
 	} else if (strncmp(s, "fade-to-black", strlen("fade-to-black")) == 0) {
 		int color = 0x0000; // black
-		fade_in(vars, color);
+		fade_out(vars, color);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
 	}
@@ -159,13 +159,13 @@ int main(int argc, char**argv)
     return 0;
 }
 
-void fade_in(RECT_VARS_T *vars, int color)
+void fade_out(RECT_VARS_T *vars, int color)
 {
     uint32_t        screen = 0;
     int             ret;
 
     if (vars->connected) {
-	fprintf(stderr, "aldready connected, not fading in again\n");
+	fprintf(stderr, "aldready connected, not fading out again\n");
 	return;
     }
     //printf("Open display[%i]...\n", screen );
@@ -251,12 +251,12 @@ void fade_in(RECT_VARS_T *vars, int color)
     vars->connected  = 1;
 }
 
-void fade_out(RECT_VARS_T *vars)
+void fade_in(RECT_VARS_T *vars)
 {
     int             ret;
 
     if (!vars->connected) {
-	fprintf(stderr, "not connected, not fading out\n");
+	fprintf(stderr, "not connected, not fading in\n");
 	return;
     }
     while(alpha.opacity > 1) {
