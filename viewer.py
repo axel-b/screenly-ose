@@ -13,7 +13,8 @@ from requests import get
 from platform import machine 
 from os import path, getenv, remove, makedirs
 from os import stat as os_stat
-from subprocess import Popen, call 
+#from subprocess import Popen, call 
+import subprocess
 import html_templates
 from datetime import datetime
 from time import sleep, time
@@ -94,6 +95,48 @@ class Browser(object):
                 break
         logging.debug('Browser show "%s" done' % uri)
         return result
+
+class Shutter(object):
+    # FIXME we only look at stdout of fade program;
+    # instead, we should also watch its stderr.
+    # moreover, what if something goes wrong and we hang forever in readline() ?
+    # should we use a timer to be robust against that?
+    def __init__(self):
+        shutter_args = [shutter_bin]
+        self.shutter = subprocess.Popen(shutter_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    def fade_to(self, color):
+        if color == 'white':
+            self.fade_to_white()
+        elif color == 'black':
+            self.fade_to_black()
+        else:
+            # FIXME give error message?
+            self.fade_to_black()
+
+    def fade_to_black(self):
+        if not self.shutter:
+                return
+        self.shutter.stdin.write('fade-to-black\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        logging.debug('fade_to_black read "%s"' % l)
+
+    def fade_to_white(self):
+        if not self.shutter:
+                return
+        self.shutter.stdin.write('fade-to-white\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        logging.debug('fade_to_white read "%s"' % l)
+
+    def fade_in(self):
+        if not self.shutter:
+                return
+        self.shutter.stdin.write('fade-in\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        logging.debug('fade_in read "%s"' % l)
 
 
 class Scheduler(object):
@@ -186,28 +229,45 @@ def generate_asset_list():
     if shuffle_playlist:
         from random import shuffle
         shuffle(playlist)
+
+    # associate fade-(out-)color with each asset in playlist,
+    # based on the mime-type of the asset succeding (after) it;
+    # we might allow user to associate colors with assets in web-interface,
+    # for now: all video: black; anything else: white
+    i = 0
+    nplaylist = len(playlist)
+    while i < nplaylist:
+        if "video" in playlist[(i+1)%nplaylist]['mimetype']:
+            playlist[i]['fade-color'] = 'black'
+        else:
+            playlist[i]['fade-color'] = 'white'
+        i = i + 1
     
     return (playlist, deadline)
     
 
-def view_image(image, name, duration):
+def view_image(image, name, duration, fade_color):
     logging.debug('Displaying image %s for %s seconds.' % (image, duration))
     url = html_templates.image_page(image, name)
     browser.show(url)
+    shutter.fade_in()
     
     sleep(int(duration))
     
+    shutter.fade_to(fade_color)
     browser.show(black_page)
     
-def view_video(video):
+def view_video(video, fade_color):
     arch = machine()
+
+    shutter.fade_in()
 
     ## For Raspberry Pi
     if arch == "armv6l":
         logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % video)
         omxplayer = "omxplayer"
         omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(video)]
-        run = call(omxplayer_args, stdout=True)
+        run = subprocess.call(omxplayer_args, stdout=True)
         logging.debug(run)
 
         if run != 0:
@@ -222,12 +282,13 @@ def view_video(video):
     elif arch == "x86_64" or arch == "x86_32":
         logging.debug('Displaying video %s. Detected x86. Using mplayer.' % video)
         mplayer = "mplayer"
-        run = call([mplayer, "-fs", "-nosound", str(video) ], stdout=False)
+        run = subprocess.call([mplayer, "-fs", "-nosound", str(video) ], stdout=False)
         if run != 0:
             logging.debug("Unclean exit: " + str(run))
 
-def view_web(url, duration):
+    shutter.fade_to(fade_color)
 
+def view_web(url, duration, fade_color):
     # If local web page, check if the file exist. If remote, check if it is
     # available.
     if (html_folder in url and path.exists(url)):
@@ -239,8 +300,11 @@ def view_web(url, duration):
         logging.debug('Web content appears to be available. Proceeding.')  
         logging.debug('Displaying url %s for %s seconds.' % (url, duration))
         browser.show(url)
+        shutter.fade_in()
     
         sleep(int(duration))
+
+        shutter.fade_to(fade_color)
     
         browser.show(black_page)
     else: 
@@ -268,6 +332,15 @@ if not path.isdir(html_folder):
 # Set up HTML templates
 black_page = html_templates.black_page()
 
+# FIXME do not hardcode shutter executable location
+shutter_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
+shutter = Shutter()
+
+# FIXME specify shutter timing here, or via config,
+# instead of hard-coded in the view_foo functions, as it is now.
+
+shutter.fade_to_black()
+
 # Fire up the browser
 browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzbl']
 browser = Browser(resolution)
@@ -278,7 +351,7 @@ if show_splash:
 
 # Bring up the blank page (in case there are only videos).
 logging.debug('Loading blank page.')
-view_web(black_page, 1)
+view_web(black_page, 1, 'white')
 
 scheduler = Scheduler()
 
@@ -297,10 +370,10 @@ while True:
         logging.info('show asset %s' % asset["name"])
 
         if "image" in asset["mimetype"]:
-            view_image(asset["uri"], asset["name"], asset["duration"])
+            view_image(asset["uri"], asset["name"], asset["duration"], asset["fade-color"])
         elif "video" in asset["mimetype"]:
-            view_video(asset["uri"])
+            view_video(asset["uri"], asset["fade-color"])
         elif "web" in asset["mimetype"]:
-            view_web(asset["uri"], asset["duration"])
+            view_web(asset["uri"], asset["duration"], asset["fade-color"])
         else:
             print "Unknown MimeType, or MimeType missing"
