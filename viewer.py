@@ -88,12 +88,16 @@ class Browser(object):
             l = self.browser.stdout.readline()
             #logging.debug('Browser show read line: "%s"' % l)
             if "LOAD_ERROR" in l:
+                logging.debug('Browser show load error line: "%s"' % l)
                 result = False
                 break
             elif "LOAD_FINISH '" in l and  uri + "'" in l:
+                logging.debug('Browser show load finish line: "%s"' % l)
                 result = True
                 break
         logging.debug('Browser show "%s" done' % uri)
+        # seems to be necessary; does it take time for uzbl to update screen after loading page?
+        sleep(0.2)
         return result
 
 class Shutter(object):
@@ -346,8 +350,11 @@ browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzb
 browser = Browser(resolution)
 
 if show_splash:
+    # FIXME can/should we deal with splash page as a special (synthesized) asset?
     browser.show("http://127.0.0.1:8080/splash_page")
+    shutter.fade_in()
     sleep(60)
+    shutter.fade_to_black()
 
 # Bring up the blank page (in case there are only videos).
 logging.debug('Loading blank page.')
