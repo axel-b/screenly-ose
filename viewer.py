@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf8 -*-
+6 -*- coding: utf8 -*-
 
 __author__ = "Viktor Petersson"
 __copyright__ = "Copyright 2012, WireLoad Inc"
@@ -55,6 +55,46 @@ def str_to_bol(string):
         return True
     else:
         return False
+
+class Browser(object):
+    def __init__(self, resolution):
+        logging.debug('Browser init...')
+        browser_args = browser_bin + ["-c", "-", "--print-events", "--geometry=" + resolution]
+        self.browser = subprocess.Popen(browser_args, bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        logging.info('Browser loaded. Running as PID %d.' % self.browser.pid)
+
+        self.browser.stdin.write('set show_status=0\n')
+        logging.debug('Browser init written command')
+        self.browser.stdin.flush()
+        logging.debug('Browser init flushed command')
+        while True:
+            #logging.debug('Browser init in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser init read line: "%s"' % l)
+            if "VARIABLE_SET show_status int 0" in l:
+                break
+        logging.debug('Browser init done')
+
+    def show(self, uri):
+        logging.debug('Browser show "%s" ...' % uri)
+        self.browser.stdin.write('set uri=%s\n' % uri)
+        logging.debug('Browser show written command')
+        self.browser.stdin.flush()
+        logging.debug('Browser show flushed command')
+        result = True
+        while True:
+            #logging.debug('Browser show in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser show read line: "%s"' % l)
+            if "LOAD_ERROR" in l:
+                result = False
+                break
+            elif "LOAD_FINISH '" in l and  uri + "'" in l:
+                result = True
+                break
+        logging.debug('Browser show "%s" done' % uri)
+        return result
+
 
 class Scheduler(object):
     def __init__(self, *args, **kwargs):
@@ -149,57 +189,15 @@ def generate_asset_list():
     
     return (playlist, deadline)
     
-def load_browser():
-    logging.info('Loading browser...')
-    browser_bin = "uzbl-browser"
-    browser_resolution = resolution
-
-    if show_splash:
-        browser_load_url = "http://127.0.0.1:8080/splash_page"
-    else:
-        browser_load_url = black_page
-
-    browser_args = [browser_bin, "--geometry=" + browser_resolution, "--uri=" + browser_load_url]
-    browser = Popen(browser_args)
-    
-    logging.info('Browser loaded. Running as PID %d.' % browser.pid)
-
-    if show_splash:
-        # Show splash screen for 60 seconds.
-        sleep(60)
-    else:
-        # Give browser some time to start (we have seen multiple uzbl running without this)
-        sleep(10)
-
-    return browser
-
-def get_fifo():
-    candidates = glob('/tmp/uzbl_fifo_*')
-    for file in candidates:
-        if S_ISFIFO(os_stat(file).st_mode):
-            return file
-        else:
-            return None    
-    
-def disable_browser_status():
-    logging.debug('Disabled status-bar in browser')
-    f = open(fifo, 'a')
-    f.write('set show_status = 0\n')
-    f.close()
-
 
 def view_image(image, name, duration):
     logging.debug('Displaying image %s for %s seconds.' % (image, duration))
     url = html_templates.image_page(image, name)
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % url)
-    f.close()
+    browser.show(url)
     
     sleep(int(duration))
     
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % black_page)
-    f.close()
+    browser.show(black_page)
     
 def view_video(video):
     arch = machine()
@@ -240,15 +238,11 @@ def view_web(url, duration):
     if web_resource == 200:
         logging.debug('Web content appears to be available. Proceeding.')  
         logging.debug('Displaying url %s for %s seconds.' % (url, duration))
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % url)
-        f.close()
+        browser.show(url)
     
         sleep(int(duration))
     
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % black_page)
-        f.close()
+        browser.show(black_page)
     else: 
         logging.debug('Received non-200 status (or file not found if local) from %s. Skipping.' % (url))
         pass
@@ -275,20 +269,16 @@ if not path.isdir(html_folder):
 black_page = html_templates.black_page()
 
 # Fire up the browser
-run_browser = load_browser()
+browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzbl']
+browser = Browser(resolution)
 
-logging.debug('Getting browser PID.')
-browser_pid = run_browser.pid
-
-logging.debug('Getting FIFO.')
-fifo = get_fifo()
+if show_splash:
+    browser.show("http://127.0.0.1:8080/splash_page")
+    sleep(60)
 
 # Bring up the blank page (in case there are only videos).
 logging.debug('Loading blank page.')
 view_web(black_page, 1)
-
-logging.debug('Disable the browser status bar')
-disable_browser_status()
 
 scheduler = Scheduler()
 
