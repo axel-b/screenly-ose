@@ -88,6 +88,8 @@ float delay = 2; // totalTime/2;
 float step = .05 / 128; // ((totalTime-delay)/2)/256;
 //float step = .05 / 256; // ((totalTime-delay)/2)/256;
 
+void hard_out(RECT_VARS_T *vars, int color);
+void hard_in(RECT_VARS_T *vars);
 void fade_out(RECT_VARS_T *vars, int color);
 void fade_in(RECT_VARS_T *vars);
 void disconnect(RECT_VARS_T *vars);
@@ -151,6 +153,20 @@ int main(int argc, char**argv)
 		fade_out(vars, color);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
+	} else if (strncmp(s, "hard-in", strlen("hard-in")) == 0) {
+		hard_in(vars);
+		fprintf(stdout, "done\n");
+		fflush(stdout);
+	} else if (strncmp(s, "hard-to-white", strlen("hard-to-white")) == 0) {
+		int color = 0xFFFF; //white
+		hard_out(vars, color);
+		fprintf(stdout, "done\n");
+		fflush(stdout);
+	} else if (strncmp(s, "hard-to-black", strlen("hard-to-black")) == 0) {
+		int color = 0x0000; // black
+		hard_out(vars, color);
+		fprintf(stdout, "done\n");
+		fflush(stdout);
 	}
     }
 
@@ -159,13 +175,13 @@ int main(int argc, char**argv)
     return 0;
 }
 
-void fade_out(RECT_VARS_T *vars, int color)
+void create_overlay(RECT_VARS_T *vars, int color)
 {
     uint32_t        screen = 0;
     int             ret;
 
     if (vars->connected) {
-	fprintf(stderr, "aldready connected, not fading out again\n");
+	fprintf(stderr, "aldready connected, not creating overlay again\n");
 	return;
     }
     //printf("Open display[%i]...\n", screen );
@@ -226,6 +242,31 @@ void fade_out(RECT_VARS_T *vars, int color)
     ret = vc_dispmanx_update_submit_sync( vars->update );
     assert( ret == 0 );
 
+}
+
+
+void hard_out(RECT_VARS_T *vars, int color)
+{
+    if (vars->connected) {
+	fprintf(stderr, "aldready connected, not hard cut out again\n");
+	return;
+    }
+    alpha.opacity = 255;
+    create_overlay(vars, color);
+
+    vars->connected  = 1;
+}
+
+void fade_out(RECT_VARS_T *vars, int color)
+{
+    int             ret;
+
+    if (vars->connected) {
+	fprintf(stderr, "aldready connected, not fading out again\n");
+	return;
+    }
+    alpha.opacity = 0;
+    create_overlay(vars, color);
 
     while(alpha.opacity < 254) {
 
@@ -249,6 +290,15 @@ void fade_out(RECT_VARS_T *vars, int color)
     }
 
     vars->connected  = 1;
+}
+
+void hard_in(RECT_VARS_T *vars)
+{
+    if (!vars->connected) {
+	fprintf(stderr, "not connected, not hard cut in\n");
+	return;
+    }
+    disconnect(vars);
 }
 
 void fade_in(RECT_VARS_T *vars)
