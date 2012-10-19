@@ -119,28 +119,30 @@ class Shutter(object):
             self.fade_to_black()
 
     def fade_to_black(self):
-        if not self.shutter:
-                return
-        self.shutter.stdin.write('fade-to-black\n')
-        self.shutter.stdin.flush()
-        l = self.shutter.stdout.readline()
-        logging.debug('fade_to_black read "%s"' % l)
+        self.issue_command('fade-to-black\n', 'fade_to_black')
 
     def fade_to_white(self):
-        if not self.shutter:
-                return
-        self.shutter.stdin.write('fade-to-white\n')
-        self.shutter.stdin.flush()
-        l = self.shutter.stdout.readline()
-        logging.debug('fade_to_white read "%s"' % l)
+        self.issue_command('fade-to-white\n', 'fade_to_white')
 
     def fade_in(self):
+        self.issue_command('fade-in\n', 'fade_in')
+
+    def hard_to_black(self):
+        self.issue_command('hard-to-black\n', 'hard_to_black')
+
+    def hard_to_white(self):
+        self.issue_command('hard-to-white\n', 'hard_to_white')
+
+    def hard_in(self):
+        self.issue_command('hard-in\n', 'hard_in')
+
+    def issue_command(self, command, function_name):
         if not self.shutter:
                 return
-        self.shutter.stdin.write('fade-in\n')
+        self.shutter.stdin.write(command)
         self.shutter.stdin.flush()
         l = self.shutter.stdout.readline()
-        logging.debug('fade_in read "%s"' % l)
+        logging.debug('%s read "%s"' % (function_name, l))
 
 
 class Scheduler(object):
