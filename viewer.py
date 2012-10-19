@@ -337,7 +337,7 @@ if not path.isdir(html_folder):
 black_page = html_templates.black_page()
 
 # FIXME do not hardcode shutter executable location
-shutter_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
+shutter_bin = path.join(getenv('HOME'), 'screenly', 'shutter', 'shutter.bin')
 shutter = Shutter()
 
 # FIXME specify shutter timing here, or via config,
