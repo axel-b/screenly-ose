@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf8 -*-
+6 -*- coding: utf8 -*-
 
 __author__ = "Viktor Petersson"
 __copyright__ = "Copyright 2012, WireLoad Inc"
@@ -57,14 +57,57 @@ def str_to_bol(string):
     else:
         return False
 
-class Fader(object):
+class Browser(object):
+    def __init__(self, resolution):
+        logging.debug('Browser init...')
+        browser_args = browser_bin + ["-c", "-", "--print-events", "--geometry=" + resolution]
+        self.browser = subprocess.Popen(browser_args, bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        logging.info('Browser loaded. Running as PID %d.' % self.browser.pid)
+
+        self.browser.stdin.write('set show_status=0\n')
+        logging.debug('Browser init written command')
+        self.browser.stdin.flush()
+        logging.debug('Browser init flushed command')
+        while True:
+            #logging.debug('Browser init in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser init read line: "%s"' % l)
+            if "VARIABLE_SET show_status int 0" in l:
+                break
+        logging.debug('Browser init done')
+
+    def show(self, uri):
+        logging.debug('Browser show "%s" ...' % uri)
+        self.browser.stdin.write('set uri=%s\n' % uri)
+        logging.debug('Browser show written command')
+        self.browser.stdin.flush()
+        logging.debug('Browser show flushed command')
+        result = True
+        while True:
+            #logging.debug('Browser show in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser show read line: "%s"' % l)
+            if "LOAD_ERROR" in l:
+                logging.debug('Browser show load error line: "%s"' % l)
+                result = False
+                break
+            elif "LOAD_FINISH '" in l and  uri + "'" in l:
+                logging.debug('Browser show load finish line: "%s"' % l)
+                result = True
+                break
+        logging.debug('Browser show "%s" done' % uri)
+        # seems to be necessary; does it take time for uzbl to update screen after loading page?
+        sleep(0.2)
+        return result
+
+class Shutter(object):
     # FIXME we only look at stdout of fade program;
     # instead, we should also watch its stderr.
     # moreover, what if something goes wrong and we hang forever in readline() ?
     # should we use a timer to be robust against that?
     def __init__(self):
-        fader_args = [fader_bin]
-        self.fader = subprocess.Popen(fader_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        shutter_args = [shutter_bin]
+        self.shutter = subprocess.Popen(shutter_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     def fade_to(self, color):
         if color == 'white':
@@ -76,28 +119,28 @@ class Fader(object):
             self.fade_to_black()
 
     def fade_to_black(self):
-        if not self.fader:
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-to-black\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
+        self.shutter.stdin.write('fade-to-black\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
         logging.debug('fade_to_black read "%s"' % l)
 
     def fade_to_white(self):
-        if not self.fader:
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-to-white\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
+        self.shutter.stdin.write('fade-to-white\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
         logging.debug('fade_to_white read "%s"' % l)
 
-    def fade_out(self):
-        if not self.fader:
+    def fade_in(self):
+        if not self.shutter:
                 return
-        self.fader.stdin.write('fade-out\n')
-        self.fader.stdin.flush()
-        l = self.fader.stdout.readline()
-        logging.debug('fade_out read "%s"' % l)
+        self.shutter.stdin.write('fade-in\n')
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        logging.debug('fade_in read "%s"' % l)
 
 
 class Scheduler(object):
@@ -206,72 +249,22 @@ def generate_asset_list():
     
     return (playlist, deadline)
     
-def load_browser():
-    logging.info('Loading browser...')
-    browser_bin = "uzbl-browser"
-    browser_resolution = resolution
-
-    if show_splash:
-        browser_load_url = "http://127.0.0.1:8080/splash_page"
-    else:
-        browser_load_url = black_page
-
-    browser_args = [browser_bin, "--geometry=" + browser_resolution, "--uri=" + browser_load_url]
-    browser = subprocess.Popen(browser_args)
-    
-    logging.info('Browser loaded. Running as PID %d.' % browser.pid)
-
-    if show_splash:
-        # Show splash screen for 60 seconds.
-        fader.fade_out()
-        sleep(60)
-        fader.fade_to_black()
-    else:
-        # Give browser some time to start (we have seen multiple uzbl running without this)
-        sleep(10)
-
-    return browser
-
-def get_fifo():
-    candidates = glob('/tmp/uzbl_fifo_*')
-    for file in candidates:
-        if S_ISFIFO(os_stat(file).st_mode):
-            return file
-        else:
-            return None    
-    
-def disable_browser_status():
-    logging.debug('Disabled status-bar in browser')
-    f = open(fifo, 'a')
-    f.write('set show_status = 0\n')
-    f.close()
-
 
 def view_image(image, name, duration, fade_color):
     logging.debug('Displaying image %s for %s seconds.' % (image, duration))
     url = html_templates.image_page(image, name)
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % url)
-    f.close()
-   
-    # allow time for image to be loaded 
-    sleep(2.5)
-    fader.fade_out()
-
+    browser.show(url)
+    shutter.fade_in()
+    
     sleep(int(duration))
     
-    fader.fade_to(fade_color)
-
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % black_page)
-    f.close()
+    shutter.fade_to(fade_color)
+    browser.show(black_page)
     
 def view_video(video, fade_color):
     arch = machine()
 
-    # give web viewer time to put up black background
-    sleep(2)
-    fader.fade_out()
+    shutter.fade_in()
 
     ## For Raspberry Pi
     if arch == "armv6l":
@@ -297,7 +290,7 @@ def view_video(video, fade_color):
         if run != 0:
             logging.debug("Unclean exit: " + str(run))
 
-    fader.fade_to(fade_color)
+    shutter.fade_to(fade_color)
 
 def view_web(url, duration, fade_color):
     # If local web page, check if the file exist. If remote, check if it is
@@ -310,20 +303,14 @@ def view_web(url, duration, fade_color):
     if web_resource == 200:
         logging.debug('Web content appears to be available. Proceeding.')  
         logging.debug('Displaying url %s for %s seconds.' % (url, duration))
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % url)
-        f.close()
-
-        sleep(2.5)
-        fader.fade_out()
+        browser.show(url)
+        shutter.fade_in()
     
         sleep(int(duration))
 
-        fader.fade_to(fade_color)
+        shutter.fade_to(fade_color)
     
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % black_page)
-        f.close()
+        browser.show(black_page)
     else: 
         logging.debug('Received non-200 status (or file not found if local) from %s. Skipping.' % (url))
         pass
@@ -349,30 +336,29 @@ if not path.isdir(html_folder):
 # Set up HTML templates
 black_page = html_templates.black_page()
 
-# FIXME do not hardcode fader executable location
-fader_bin = path.join(getenv('HOME'), 'screenly', 'fade.bin')
-fader = Fader()
+# FIXME do not hardcode shutter executable location
+shutter_bin = path.join(getenv('HOME'), 'screenly', 'shutter', 'shutter.bin')
+shutter = Shutter()
 
-# FIXME specify fader timing here, or via config,
+# FIXME specify shutter timing here, or via config,
 # instead of hard-coded in the view_foo functions, as it is now.
 
-fader.fade_to_black()
+shutter.fade_to_black()
 
 # Fire up the browser
-run_browser = load_browser()
+browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzbl']
+browser = Browser(resolution)
 
-logging.debug('Getting browser PID.')
-browser_pid = run_browser.pid
-
-logging.debug('Getting FIFO.')
-fifo = get_fifo()
+if show_splash:
+    # FIXME can/should we deal with splash page as a special (synthesized) asset?
+    browser.show("http://127.0.0.1:8080/splash_page")
+    shutter.fade_in()
+    sleep(60)
+    shutter.fade_to_black()
 
 # Bring up the blank page (in case there are only videos).
 logging.debug('Loading blank page.')
 view_web(black_page, 1, 'white')
-
-logging.debug('Disable the browser status bar')
-disable_browser_status()
 
 scheduler = Scheduler()
 
