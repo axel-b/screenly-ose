@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-6 -*- coding: utf8 -*-
+# -*- coding: utf8 -*-
 
 __author__ = "Viktor Petersson"
 __copyright__ = "Copyright 2012, WireLoad Inc"
