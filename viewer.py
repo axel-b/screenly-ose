@@ -261,7 +261,7 @@ nodetype = config.get('main', 'nodetype')
 show_splash = str_to_bol(config.get('viewer', 'show_splash'))
 audio_output = config.get('viewer', 'audio_output')
 shuffle_playlist = str_to_bol(config.get('viewer', 'shuffle_playlist'))
-port = str_to_bol(config.get('main', 'port'))
+port = config.get('main', 'port')
 
 try:
     resolution = config.get('viewer', 'resolution')
