@@ -24,7 +24,8 @@ from urlparse import urlparse
 from hurry.filesize import size
 
 # Get config file
-config = ConfigParser.ConfigParser()
+config_defaults = {'port':'8080'}
+config = ConfigParser.ConfigParser(config_defaults)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     print 'Config-file missing.'
@@ -36,6 +37,7 @@ else:
 configdir = path.join(getenv('HOME'), config.get('main', 'configdir'))
 database = path.join(getenv('HOME'), config.get('main', 'database'))
 nodetype = config.get('main', 'nodetype')
+port = config.get('main', 'port')
 
 # get database last modification time
 try:
@@ -374,7 +376,7 @@ def splash_page():
     try:
         my_ip = ifaddresses('eth0')[2][0]['addr']
         ip_lookup = True
-        url = 'http://' + my_ip + ':8080'
+        url = 'http://' + my_ip + ':' + port
     except:
         ip_lookup = False
         url = "Unable to lookup IP from eth0."
@@ -475,7 +477,6 @@ def mistake404(code):
 
 # Ugly local dev fix.
 if platform == "darwin":
-    port = '8080'
     run(host='127.0.0.1', port=port, reloader=True)
 else:
-    run(host='0.0.0.0', port=8080, reloader=True)
+    run(host='0.0.0.0', port=port, reloader=True)

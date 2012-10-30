@@ -35,7 +35,8 @@ requests_log.setLevel(logging.WARNING)
 logging.debug('Starting viewer.py')
 
 # Get config file
-config = ConfigParser.ConfigParser()
+config_defaults = {'port':'8080'}
+config = ConfigParser.ConfigParser(config_defaults)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     logging.info('Config-file missing.')
@@ -99,7 +100,7 @@ class Scheduler(object):
         # return self.dbisnewer_ask_server()
 
     def dbisnewer_ask_server(self):
-        dbisnewer = get("http://127.0.0.1:8080/dbisnewer/"+str(self.gentime))
+        dbisnewer = get("http://127.0.0.1:" + port + "/dbisnewer/" + str(self.gentime))
         logging.info('dbisnewer: code (%d), text: (%s)' % (dbisnewer.status_code, dbisnewer.text))
         return dbisnewer.status_code == 200 and dbisnewer.text == "yes"
 
@@ -155,7 +156,7 @@ def load_browser():
     browser_resolution = resolution
 
     if show_splash:
-        browser_load_url = "http://127.0.0.1:8080/splash_page"
+        browser_load_url = "http://127.0.0.1:" + port + "/splash_page"
     else:
         browser_load_url = black_page
 
@@ -260,6 +261,7 @@ nodetype = config.get('main', 'nodetype')
 show_splash = str_to_bol(config.get('viewer', 'show_splash'))
 audio_output = config.get('viewer', 'audio_output')
 shuffle_playlist = str_to_bol(config.get('viewer', 'shuffle_playlist'))
+port = str_to_bol(config.get('main', 'port'))
 
 try:
     resolution = config.get('viewer', 'resolution')
