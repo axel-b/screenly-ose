@@ -17,6 +17,8 @@ from json import dumps, loads
 from datetime import datetime, timedelta
 from time import time
 from bottle import route, run, debug, template, request, validate, error, static_file, get, redirect
+from cherrypy.wsgiserver import CherryPyWSGIServer
+from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter
 from dateutils import datestring
 from StringIO import StringIO
 from PIL import Image
@@ -28,6 +30,9 @@ import bottlesession
 
 # when no credentials are given in config, the web interface will not ask for them
 config_defaults = {'username':'', 'password':''}
+
+# when ssl certificate and key files are given, use https; otherwise, use http
+config_defaults.update({'sslcert':'', 'sslkey':''})
 
 # Get config file
 config = ConfigParser.ConfigParser(config_defaults)
@@ -42,6 +47,18 @@ else:
 configdir = path.join(getenv('HOME'), config.get('main', 'configdir'))
 database = path.join(getenv('HOME'), config.get('main', 'database'))
 nodetype = config.get('main', 'nodetype')
+
+# decide whether to use https or http
+sslcert = config.get('main', 'sslcert')
+sslkey = config.get('main', 'sslkey')
+if sslcert and sslkey:
+    server = 'cherrypy'
+    print 'using HTTPS via %s server' % server
+    CherryPyWSGIServer.ssl_adapter = BuiltinSSLAdapter(sslcert, sslkey, None)
+    # Note: side-effect of next line: we get cherrypy favicon
+else: # use default bottle server
+    server = 'wsgiref'
+    print 'using HTTP via %s server' % server
 
 # get database last modification time
 try:
@@ -571,6 +588,6 @@ def mistake404(code):
 # Ugly local dev fix.
 if platform == "darwin":
     port = '8080'
-    run(host='127.0.0.1', port=port, reloader=True)
+    run(host='127.0.0.1', port=port, reloader=True, server=server)
 else:
-    run(host='0.0.0.0', port=8080, reloader=True)
+    run(host='0.0.0.0', port=8080, reloader=True, server=server)
