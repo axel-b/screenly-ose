@@ -34,8 +34,13 @@ requests_log.setLevel(logging.WARNING)
 
 logging.debug('Starting viewer.py')
 
+config_defaults = {}
+
+# when ssl certificate and key files are given, use https; otherwise, use http
+config_defaults.update({'sslcert':'', 'sslkey':''})
+
 # Get config file
-config = ConfigParser.ConfigParser()
+config = ConfigParser.ConfigParser(config_defaults)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     logging.info('Config-file missing.')
