@@ -12,7 +12,7 @@ if [ $ROOT_AVAIL -lt $MIN_REQ ]; then
 fi
 
 echo "Installing dependencies..."
-sudo apt-get -y install python-pip python-netifaces python-simplejson python-imaging python-cherrypy3 python-openssl uzbl unclutter sqlite3 supervisor omxplayer x11-xserver-utils watchdog chkconfig
+sudo apt-get -y install python-pip python-netifaces python-simplejson python-imaging python-cherrypy3 python-openssl python-paste uzbl unclutter sqlite3 supervisor omxplayer x11-xserver-utils watchdog chkconfig
 sudo pip install bottle requests pytz hurry.filesize
 
 echo "Adding Screenly to X auto start..."

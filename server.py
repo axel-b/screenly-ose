@@ -16,9 +16,10 @@ from hashlib import md5
 from json import dumps, loads 
 from datetime import datetime, timedelta
 from time import time
-from bottle import route, run, debug, template, request, validate, error, static_file, get, redirect
+from bottle import route, run, debug, template, request, validate, error, static_file, get, redirect, app as bottle_app
 from cherrypy.wsgiserver import CherryPyWSGIServer
 from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter
+from paste.translogger import TransLogger
 from dateutils import datestring
 from StringIO import StringIO
 from PIL import Image
@@ -48,17 +49,23 @@ configdir = path.join(getenv('HOME'), config.get('main', 'configdir'))
 database = path.join(getenv('HOME'), config.get('main', 'database'))
 nodetype = config.get('main', 'nodetype')
 
+# always use cherrypy, independent of use of http or https,
+# such that we always can use same logging config via translogger
+# (if we just use wsgiref server for http, we get double logging)
+# Note: side-effect of using cherrypy server: we get cherrypy favicon
+server = 'cherrypy'
+# make sure we get logging output while using cherrypy as server
+logapp = TransLogger(bottle_app())
+
 # decide whether to use https or http
 sslcert = config.get('main', 'sslcert')
 sslkey = config.get('main', 'sslkey')
 if sslcert and sslkey:
-    server = 'cherrypy'
-    print 'using HTTPS via %s server' % server
+    proto = 'HTTPS'
     CherryPyWSGIServer.ssl_adapter = BuiltinSSLAdapter(sslcert, sslkey, None)
-    # Note: side-effect of next line: we get cherrypy favicon
-else: # use default bottle server
-    server = 'wsgiref'
-    print 'using HTTP via %s server' % server
+else:
+    proto = 'HTTP'
+print 'using %s via %s server' % (proto, server)
 
 # get database last modification time
 try:
@@ -588,6 +595,6 @@ def mistake404(code):
 # Ugly local dev fix.
 if platform == "darwin":
     port = '8080'
-    run(host='127.0.0.1', port=port, reloader=True, server=server)
+    run(app=logapp, host='127.0.0.1', port=port, reloader=True, server=server)
 else:
-    run(host='0.0.0.0', port=8080, reloader=True, server=server)
+    run(app=logapp, host='0.0.0.0', port=8080, reloader=True, server=server)
