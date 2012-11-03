@@ -52,7 +52,6 @@ nodetype = config.get('main', 'nodetype')
 # always use cherrypy, independent of use of http or https,
 # such that we always can use same logging config via translogger
 # (if we just use wsgiref server for http, we get double logging)
-# Note: side-effect of using cherrypy server: we get cherrypy favicon
 server = 'cherrypy'
 # make sure we get logging output while using cherrypy as server
 logapp = TransLogger(bottle_app())
