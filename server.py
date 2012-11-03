@@ -60,10 +60,10 @@ logapp = TransLogger(bottle_app())
 sslcert = config.get('main', 'sslcert')
 sslkey = config.get('main', 'sslkey')
 if sslcert and sslkey:
-    proto = 'HTTPS'
+    proto = 'https'
     CherryPyWSGIServer.ssl_adapter = BuiltinSSLAdapter(sslcert, sslkey, None)
 else:
-    proto = 'HTTP'
+    proto = 'http'
 print 'using %s via %s server' % (proto, server)
 
 # get database last modification time
@@ -482,7 +482,7 @@ def splash_page():
     try:
         my_ip = ifaddresses('eth0')[2][0]['addr']
         ip_lookup = True
-        url = 'http://' + my_ip + ':8080'
+        url = proto + '://' + my_ip + ':8080'
     except:
         ip_lookup = False
         url = "Unable to lookup IP from eth0."

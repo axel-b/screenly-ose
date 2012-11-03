@@ -44,6 +44,16 @@ else:
     logging.debug('Reading config-file...')
     config.read(conf_file)
 
+# decide whether server uses https or http
+sslcert = config.get('main', 'sslcert')
+sslkey = config.get('main', 'sslkey')
+if sslcert and sslkey:
+    proto = 'https'
+else:
+    proto = 'http'
+logging.debug('Server uses %s' % proto)
+
+
 def time_lookup():
     if nodetype == "standalone":
         return datetime.now()
@@ -99,7 +109,7 @@ class Scheduler(object):
         # return self.dbisnewer_ask_server()
 
     def dbisnewer_ask_server(self):
-        dbisnewer = get("http://127.0.0.1:8080/dbisnewer/"+str(self.gentime))
+        dbisnewer = get(proto+"://127.0.0.1:8080/dbisnewer/"+str(self.gentime))
         logging.info('dbisnewer: code (%d), text: (%s)' % (dbisnewer.status_code, dbisnewer.text))
         return dbisnewer.status_code == 200 and dbisnewer.text == "yes"
 
@@ -155,7 +165,7 @@ def load_browser():
     browser_resolution = resolution
 
     if show_splash:
-        browser_load_url = "http://127.0.0.1:8080/splash_page"
+        browser_load_url = proto + "://127.0.0.1:8080/splash_page"
     else:
         browser_load_url = black_page
 
