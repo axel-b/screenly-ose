@@ -9,7 +9,7 @@ __email__ = "vpetersson@wireload.net"
 
 import sqlite3, ConfigParser
 from netifaces import ifaddresses
-import sys
+from sys import exit, platform, stdout, path as sys_path
 from requests import get as req_get
 from os import path, getenv, makedirs, getloadavg, statvfs
 from hashlib import md5
@@ -23,7 +23,7 @@ from PIL import Image
 from urlparse import urlparse
 from hurry.filesize import size
 
-sys.path.append('bottlesession')
+sys_path.append('bottlesession')
 import bottlesession
 
 # when no credentials are given in config, the web interface will not ask for them
@@ -34,7 +34,7 @@ config = ConfigParser.ConfigParser(config_defaults)
 conf_file = path.join(getenv('HOME'), '.screenly', 'screenly.conf')
 if not path.isfile(conf_file):
     print 'Config-file missing.'
-    sys.exit(1)
+    exit(1)
 else:
     print 'Reading config-file...'
     config.read(conf_file)
@@ -235,7 +235,7 @@ def dbisnewer(t):
         res = 'error'
 
     print 'dbisnewer t='+str(t)+'  db_mtime='+str(db_mtime)+' : '+res
-    sys.stdout.flush()
+    stdout.flush()
     return res
 
 @route('/process_asset', method='POST')
@@ -569,7 +569,7 @@ def mistake404(code):
     return 'Sorry, this page does not exist!'
 
 # Ugly local dev fix.
-if sys.platform == "darwin":
+if platform == "darwin":
     port = '8080'
     run(host='127.0.0.1', port=port, reloader=True)
 else:
