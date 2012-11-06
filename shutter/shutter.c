@@ -26,6 +26,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 // A simple demo using dispmanx to display an overlay
+// hacked to implement a fader/shutter overlay
+
+// NOTE: it interacts on stdin/stdout, via a 'fixed protocol'
+// and thus:
+// all warnings, messages, diagnostics that do _not_ belong to the interaction,
+// must be written to stderr
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,6 +66,7 @@ static VC_RECT_T       src_rect;
 static VC_RECT_T       dst_rect;
 static VC_IMAGE_TYPE_T type = VC_IMAGE_RGB565;
 
+static char* program = "shutter";
 
 static void FillRect( VC_IMAGE_TYPE_T type, void *image, int pitch, int aligned_height, int x, int y, int w, int h, int val )
 {
@@ -85,7 +92,8 @@ static VC_DISPMANX_ALPHA_T alpha = { DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX
 float totalTime = .4; //sec
 
 float delay = 2; // totalTime/2;
-float step = .05 / 128; // ((totalTime-delay)/2)/256;
+//float step = .05 / 128; // ((totalTime-delay)/2)/256;
+float step = .025 / 128; // ((totalTime-delay)/2)/256;
 //float step = .05 / 256; // ((totalTime-delay)/2)/256;
 
 void hard_out(RECT_VARS_T *vars, int color);
@@ -175,29 +183,45 @@ int main(int argc, char**argv)
     return 0;
 }
 
-void create_overlay(RECT_VARS_T *vars, int color)
+// return 1 if everthing went ok
+// return 0 otherwise
+// if we return 0, there are no resources that must be freed later
+int create_overlay(RECT_VARS_T *vars, int color)
 {
     uint32_t        screen = 0;
     int             ret;
 
     if (vars->connected) {
-	fprintf(stderr, "aldready connected, not creating overlay again\n");
-	return;
+	fprintf(stderr, "%s: already connected, not creating overlay again\n", program);
+	return 0;
     }
-    //printf("Open display[%i]...\n", screen );
+    //fprintf(stderr, "%s:Open display[%i]...\n", program, screen );
     vars->display = vc_dispmanx_display_open( screen );
+    if (vars->display == 0) {
+        fprintf(stderr,  "%s: no display\n", program);
+        return 0;
+    }
+
 
     ret = vc_dispmanx_display_get_info( vars->display, &vars->info);
-    assert(ret == 0);
-    //printf( "Display is %d x %d\n", vars->info.width, vars->info.height );
+    if(ret != 0) {
+        fprintf(stderr, "%s: cannot get display info\n", program);
+        return 0; 
+    }
+    //fprintf(stderr, "%s: Display is %d x %d\n", program, vars->info.width, vars->info.height );
 
 
     int width = vars->info.width, height = vars->info.height;
     int pitch = ALIGN_UP(width*2, 32);
     int aligned_height = ALIGN_UP(height, 16);
+    
+    //fprintf(stderr, "%s: Display pitch %d height %d\n", program, pitch, height );
 
     vars->image = calloc( 1, pitch * height );
-    assert(vars->image);
+    if (vars->image == 0) {
+        fprintf(stderr, "%s: cannot allocate overlay image\n", program);
+        return 0;
+    }
 
     FillRect( type, vars->image, pitch, aligned_height,  0,  0, width,      height,      color);
     //FillRect( type, vars->image, pitch, aligned_height,  0,  0, width,      height,      0x0000 );
@@ -210,16 +234,28 @@ void create_overlay(RECT_VARS_T *vars, int color)
                                                   width,
                                                   height,
                                                   &vars->vc_image_ptr );
-    assert( vars->resource );
+    if (vars->resource == 0) {
+        fprintf(stderr, "%s: cannot create overlay resource\n", program);
+        free(vars->image);
+        return 0;
+    }
     vc_dispmanx_rect_set( &dst_rect, 0, 0, width, height);
     ret = vc_dispmanx_resource_write_data(  vars->resource,
                                             type,
                                             pitch,
                                             vars->image,
                                             &dst_rect );
-    assert( ret == 0 );
+    if( ret != 0 ) {
+        fprintf(stderr, "%s: cannot write overlay resource\n", program);
+        free(vars->image);
+        return 0;
+    }
     vars->update = vc_dispmanx_update_start( 10 );
-    assert( vars->update );
+    if( !vars->update ) {
+        fprintf(stderr, "%s: cannot start overlay update\n", program);
+        free(vars->image);
+        return 0;
+    }
 
     vc_dispmanx_rect_set( &src_rect, 0, 0, width << 16, height << 16 );
 
@@ -240,20 +276,27 @@ void create_overlay(RECT_VARS_T *vars, int color)
                                                 VC_IMAGE_ROT0 );
 
     ret = vc_dispmanx_update_submit_sync( vars->update );
-    assert( ret == 0 );
+    if( ret != 0 ) {
+        fprintf(stderr, "%s: cannot sync overlay update\n", program);
+        free(vars->image);
+        return 0;
+    }
 
+    return 1; // everything went fine
 }
 
 
 void hard_out(RECT_VARS_T *vars, int color)
 {
     if (vars->connected) {
-	fprintf(stderr, "aldready connected, not hard cut out again\n");
+	fprintf(stderr, "%s: already connected, not hard cut out again\n", program);
 	return;
     }
     alpha.opacity = 255;
-    create_overlay(vars, color);
-
+    if (!create_overlay(vars, color)) {
+        fprintf(stderr, "%s: cannot create overlay for hard-out\n", program);
+        return;
+    }
     vars->connected  = 1;
 }
 
@@ -262,20 +305,27 @@ void fade_out(RECT_VARS_T *vars, int color)
     int             ret;
 
     if (vars->connected) {
-	fprintf(stderr, "aldready connected, not fading out again\n");
+	fprintf(stderr, "%s: already connected, not fading out again\n", program);
 	return;
     }
     alpha.opacity = 0;
-    create_overlay(vars, color);
+    if (!create_overlay(vars, color)) {
+        fprintf(stderr, "%s: cannot create overlay for fade-out\n", program);
+        return;
+    }
+    vars->connected  = 1;
 
     while(alpha.opacity < 254) {
 
-        //printf( "%d %d Sleeping for 1 seconds...\n", i, alpha.opacity );
+        //fprintf(stderr, "%s: %d %d Sleeping for 1 seconds...\n", program, i, alpha.opacity );
     	sleep( step );
     	alpha.opacity += 2;
 	
         vars->update = vc_dispmanx_update_start( 10 );
-        assert( vars->update );
+        if( ! vars->update ) {
+            fprintf(stderr, "%s: cannot start fade-out update\n", program);
+            return;
+        }
     	vc_dispmanx_element_change_attributes( vars->update,
 					   vars->element,
 					   (1<<1),
@@ -286,16 +336,18 @@ void fade_out(RECT_VARS_T *vars, int color)
                                                 vars->resource,
                                                 VC_IMAGE_ROT0 );
     	ret = vc_dispmanx_update_submit_sync( vars->update );
-    	assert( ret == 0 );
+    	if( ret != 0 ) {
+            fprintf(stderr, "%s: cannot sync fade-out update\n", program);
+            return;
+        }
     }
 
-    vars->connected  = 1;
 }
 
 void hard_in(RECT_VARS_T *vars)
 {
     if (!vars->connected) {
-	fprintf(stderr, "not connected, not hard cut in\n");
+	fprintf(stderr, "%s: not connected, not hard cut in\n", program);
 	return;
     }
     disconnect(vars);
@@ -306,17 +358,20 @@ void fade_in(RECT_VARS_T *vars)
     int             ret;
 
     if (!vars->connected) {
-	fprintf(stderr, "not connected, not fading in\n");
+	fprintf(stderr, "%s: not connected, not fading in\n", program);
 	return;
     }
     while(alpha.opacity > 1) {
 
-        //printf( "%d %d Sleeping for 1 seconds...\n", i, alpha.opacity );
+        //fprintf(stderr, "%s: %d %d Sleeping for 1 seconds...\n", program, i, alpha.opacity );
     	sleep( step );
     	alpha.opacity -= 2;
 	
         vars->update = vc_dispmanx_update_start( 10 );
-        assert( vars->update );
+        if( ! vars->update ) {
+            fprintf(stderr, "%s: cannot start fade-in update\n", program);
+            return;
+        }
     	vc_dispmanx_element_change_attributes( vars->update,
 					   vars->element,
 					   (1<<1),
@@ -327,7 +382,10 @@ void fade_in(RECT_VARS_T *vars)
                                                 vars->resource,
                                                 VC_IMAGE_ROT0 );
     	ret = vc_dispmanx_update_submit_sync( vars->update );
-    	assert( ret == 0 );
+    	if( ret != 0 ) {
+            fprintf(stderr, "%s: cannot sync fade-in update\n", program);
+            return;
+        }
     }
     disconnect(vars);
 }
@@ -337,19 +395,34 @@ void disconnect(RECT_VARS_T *vars)
     int             ret;
 
     if (!vars->connected) {
-	fprintf(stderr, "not connected, not disconnecting\n");
+	fprintf(stderr, "%s: not connected, not disconnecting\n", program);
 	return;
     }
     vars->update = vc_dispmanx_update_start( 10 );
-    assert( vars->update );
+    if( !vars->update ) {
+        fprintf(stderr, "%s: cannot start disconnect update\n", program);
+        return;
+    }
     ret = vc_dispmanx_element_remove( vars->update, vars->element );
-    assert( ret == 0 );
+    if( ret != 0 ){
+        fprintf(stderr, "%s: disconnect: cannot remove element\n", program);
+        return;
+    }
     ret = vc_dispmanx_update_submit_sync( vars->update );
-    assert( ret == 0 );
+    if( ret != 0 ) {
+        fprintf(stderr, "%s: cannot sync disconnect update\n", program);
+        return;
+    }
     ret = vc_dispmanx_resource_delete( vars->resource );
-    assert( ret == 0 );
+    if( ret != 0 ) {
+        fprintf(stderr, "%s: disconnect: cannot delete resource\n", program);
+        return;
+    }
     ret = vc_dispmanx_display_close( vars->display );
-    assert( ret == 0 );
+    if( ret != 0 ) {
+        fprintf(stderr, "%s: disconnect: cannot close display\n", program);
+        return;
+    }
 
     free(vars->image);
     vars->image = 0;
