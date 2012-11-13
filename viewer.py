@@ -419,11 +419,6 @@ class PlayerAsset(BaseAsset):
         self.player = None
 
     def prepare(self):
-            # black_video_background_page seems not necessary any more,
-            # video start up is fast enough to just use black_page
-            # browser.show(black_video_background_page)
-            # no need for black page anymore: we use black X root window
-            # browser.show(black_page)
             self.player = Player(self.asset["uri"])
             #next_asset.prefetched = True
 
@@ -505,10 +500,6 @@ html_folder = '/tmp/screenly_html/'
 if not path.isdir(html_folder):
    makedirs(html_folder)
 
-# Set up HTML templates
-black_page = html_templates.black_page()
-black_video_background_page = html_templates.black_video_background_page()
-
 # FIXME do not hardcode shutter executable location
 shutter_bin = path.join(getenv('HOME'), 'screenly', 'shutter', 'shutter.bin')
 shutter = Shutter()
@@ -536,14 +527,9 @@ omxplayer_old_logfile = path.join(getenv('HOME'), 'omxplayer.old.log')
 if show_splash:
     # FIXME can/should we deal with splash page as a special (synthesized) asset?
     browser.show("http://127.0.0.1:8080/splash_page")
-    # don't know why we used black_video_background_page here;
-    # using black_page will look much better.
-    # browser.show(black_video_background_page)
     swap_browser()
-    #browser.show(black_page)
     shutter.fade_in()
     time_to_wait = 15 # was 60
-    # browser.show(black_page)
 else:
     time_to_wait = 1
 
@@ -567,7 +553,6 @@ while True:
         # The playlist is empty, go to sleep.
         logging.info('Playlist is empty. Going to sleep.')
         sleep(5)
-        # next_asset  = view_web(black_page, 1, 'white')
         next_asset  = scheduler.get_next_asset()
     else:
         logging.info('show asset %s' % asset.name())
