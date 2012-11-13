@@ -274,12 +274,17 @@ class Scheduler(object):
                 if web_status == 200:
                     logging.debug('Web content appears to be available. Proceeding.')
                     logging.debug('got asset'+str(next_asset))
-                    return Asset(next_asset)
+                    return BrowserAsset(next_asset)
                 else:
                     logging.debug('Received non-200 status %d (or file not found if local) from %s. Skipping.' % (web_status, url))
                     pass
+            elif next_asset and "image" in next_asset["mimetype"]:
+                return BrowserAsset(next_asset)
+            elif next_asset and "video" in next_asset["mimetype"]:
+                return PlayerAsset(next_asset)
             else:
-                return Asset(next_asset)
+                logging.debug('skipping None asset, or with unknown mimetype')
+                pass
             i = i + 1
         return None
 
@@ -362,16 +367,34 @@ def generate_asset_list():
 
     return (playlist, deadline)
 
-class Asset(object):
+class BaseAsset(object):
     def __init__(self, asset):
         self.asset = asset
+
+    def prepare(self):
+        raise NotImplementedError
+
+    def start(self):
+        raise NotImplementedError
+
+    def wait(self):
+        raise NotImplementedError
+
+    def name(self):
+        return self.asset["name"]
+
+class BrowserAsset(BaseAsset):
+    def __init__(self):
+        super(BrowserAsset, self, *args, **kwargs).__init(*args, **kwargs)
         #self.prefetched = False
 
-    def show(self):
-        global player
-        next_asset = None
-        if "image" in self.asset["mimetype"]:
-            # view_image(self.asset["uri"], self.asset["name"], self.asset["duration"], self.asset["fade-color"])
+    def prepare(self):
+            # load this in browser, not browser2, because we just swapped them
+            browser.show(next_asset.asset["uri"])
+            # next_asset.prefetch()
+            #next_asset.prefetched = True
+
+    def start(self):
             #if not self.prefetched:
             #    browser.show(self.asset["uri"])
             #    self.prefetched = True
@@ -383,13 +406,36 @@ class Asset(object):
             sleep(0.15)
             shutter.fade_in()
             browser.iconifywindow()
-            start = time()
-        elif "video" in self.asset["mimetype"]:
+            self.start = time()
+    def wait(self):
+        remaining = (self.start + int(self.asset["duration"]) - time())
+        logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
+        if remaining > 0:
+            sleep(remaining)
+        shutter.fade_to(self.asset["fade-color"])
+ 
+class PlayerAsset(BaseAsset):
+    def __init__(self):
+        super(BrowserAsset, self, *args, **kwargs).__init(*args, **kwargs)
+        #self.prefetched = False
+        self.player = None
+
+    def prepare(self):
+            # black_video_background_page seems not necessary any more,
+            # video start up is fast enough to just use black_page
+            # browser.show(black_video_background_page)
+            # no need for black page anymore: we use black X root window
+            # browser.show(black_page)
+            self.player = Player(self.asset["uri"])
+            #next_asset.prefetched = True
+
+    def start(self):
             # view_video(self.asset["uri"], self.asset["fade-color"])
             arch = machine()
 
             #if not self.prefetched:
             #    browser.show(black_video_background_page)
+            #    self.player = Player(self.asset["uri"])
             #    self.prefetched = True
 
             swap_browser()
@@ -404,8 +450,8 @@ class Asset(object):
             # shutter.fade_in()
             shutter.hard_in()
 
-            if player:
-                player.start()
+            if self.player:
+                self.player.start()
 
             ### For Raspberry Pi
             #if arch == "armv6l":
@@ -431,61 +477,10 @@ class Asset(object):
             #    if run != 0:
             #        logging.debug("Unclean exit: " + str(run))
 
-        elif "web" in self.asset["mimetype"]:
-            #if not self.prefetched:
-            #    browser.show(self.asset["uri"])
-            #    self.prefetched = True
-            browser.raisewindow()
-            swap_browser()
-            # seems that we need slightly more time than .05 to raise the window
-            #sleep(0.05)
-            # sleep(0.075)
-            sleep(0.15)
-            shutter.fade_in()
-            browser.iconifywindow()
-            start = time()
-        else:
-            print "Unknown MimeType, or MimeType missing"
-
-        next_asset = scheduler.get_next_asset()
-        logging.debug('got asset'+str(next_asset))
-
-        next_player = None
-        if next_asset and next_asset.asset["mimetype"]:
-            if "image" in next_asset.asset["mimetype"] or "web" in next_asset.asset["mimetype"]:
-                # load this in browser, not browser2, because we just swapped them
-                browser.show(next_asset.asset["uri"])
-                # next_asset.prefetch()
-                #next_asset.prefetched = True
-            elif "video" in next_asset.asset["mimetype"]:
-                # black_video_background_page seems not necessary any more,
-                # video start up is fast enough to just use black_page
-                # browser.show(black_video_background_page)
-                # no need for black page anymore: we use black X root window
-                # browser.show(black_page)
-                next_player = Player(next_asset.asset["uri"])
-                #next_asset.prefetched = True
-
-        if "image" in self.asset["mimetype"] or "web" in self.asset["mimetype"]:
-            remaining = (start + int(self.asset["duration"]) - time())
-            logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
-            if remaining > 0:
-                sleep(remaining)
-        elif player:
-           player.wait()
-
-        if next_asset and next_asset.asset["mimetype"] and  "video" in next_asset.asset["mimetype"] and next_player:
-           player = next_player
-
-        if "video" in self.asset["mimetype"]:
-            shutter.hard_to_black()
-        else:
-            shutter.fade_to(self.asset["fade-color"])
-
-        return next_asset
-
-    def name(self):
-        return self.asset["name"]
+    def wait():
+        if self.player:
+            self.player.wait()
+        shutter.hard_to_black()
 
 def swap_browser():
     global browser
@@ -558,6 +553,7 @@ else:
 cur = time()
 scheduler = Scheduler()
 asset = scheduler.get_next_asset()
+asset.prepare()
 
 remaining = (cur + time_to_wait) - time()
 if remaining > 0:
@@ -578,6 +574,9 @@ while True:
         next_asset  = scheduler.get_next_asset()
     else:
         logging.info('show asset %s' % asset.name())
-        next_asset = asset.show()
+        asset.start()
+        next_asset  = scheduler.get_next_asset()
+        next_asset.prepare()
+        asset.wait()
 
     asset = next_asset
