@@ -60,10 +60,8 @@ def str_to_bol(string):
 
 class Player(object):
     def __init__(self, uri):
-        # player_args = player_bin + ['-s', uri]
-        player_args = player_bin + [uri]
-        # FIXME remove hardoded path (NOTE must be complete absolute path)
-        self.player = pexpect.spawn('%s %s' % ('/usr/bin/omxplayer', uri))
+        # do not use '-s' flag (not needed, will give lots of unneeded output)
+        self.player = pexpect.spawn('%s %s' % (player_bin, uri))
         logging.info('Player started.')
 
         self.player.send('p')
@@ -531,10 +529,9 @@ browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzb
 browser = Browser(resolution)
 browser2 = Browser(resolution)
 browser2.lowerwindow()
-player_bin = ['omxplayer']
+player_bin = '/usr/bin/omxplayer'
 omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
 omxplayer_old_logfile = path.join(getenv('HOME'), 'omxplayer.old.log')
-player = None
 
 if show_splash:
     # FIXME can/should we deal with splash page as a special (synthesized) asset?
