@@ -382,28 +382,30 @@ class BaseAsset(object):
         return self.asset["name"]
 
 class BrowserAsset(BaseAsset):
-    def __init__(self):
-        super(BrowserAsset, self, *args, **kwargs).__init(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(BrowserAsset, self).__init__(*args, **kwargs)
+        self.start = time() # or should we initialize to 0 or -1?
         #self.prefetched = False
 
     def prepare(self):
-            # load this in browser, not browser2, because we just swapped them
-            browser.show(self.asset["uri"])
-            #self.prefetched = True
+        load this in browser, not browser2, because we just swapped them
+        browser.show(self.asset["uri"])
+        self.start = time() # or should we initialize to 0 or -1?
+        #self.prefetched = True
 
     def start(self):
-            #if not self.prefetched:
-            #    browser.show(self.asset["uri"])
-            #    self.prefetched = True
-            browser.raisewindow()
-            swap_browser()
-            # seems that we need slightly more time than .05 to raise the window
-            #sleep(0.05)
-            #sleep(0.075)
-            sleep(0.15)
-            shutter.fade_in()
-            browser.iconifywindow()
-            self.start = time()
+        #if not self.prefetched:
+        #    browser.show(self.asset["uri"])
+        #    self.prefetched = True
+        browser.raisewindow()
+        swap_browser()
+        # seems that we need slightly more time than .05 to raise the window
+        #sleep(0.05)
+        #sleep(0.075)
+        sleep(0.15)
+        shutter.fade_in()
+        browser.iconifywindow()
+        self.start = time()
 
     def wait(self):
         remaining = (self.start + int(self.asset["duration"]) - time())
@@ -413,61 +415,62 @@ class BrowserAsset(BaseAsset):
         shutter.fade_to(self.asset["fade-color"])
  
 class PlayerAsset(BaseAsset):
-    def __init__(self):
-        super(BrowserAsset, self, *args, **kwargs).__init(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(BrowserAsset, self).__init__(*args, **kwargs)
         self.player = None
         #self.prefetched = False
 
     def prepare(self):
-            self.player = Player(self.asset["uri"])
-            #self.prefetched = True
+        self.player = Player(self.asset["uri"])
+        #self.prefetched = True
 
     def start(self):
-            # view_video(self.asset["uri"], self.asset["fade-color"])
+        # view_video(self.asset["uri"], self.asset["fade-color"])
 
-            #if not self.prefetched:
-            #    self.player = Player(self.asset["uri"])
-            #    self.prefetched = True
+        #if not self.prefetched:
+        #    self.player = Player(self.asset["uri"])
+        #    self.prefetched = True
 
-            swap_browser()
-            browser.iconifywindow()
+        # browser is already/still iconified
+        swap_browser()
+        browser.iconifywindow()
 
-            # seems that we need slightly more time than .05 to raise the window
-            #sleep(0.05)
-            #sleep(0.1)
-            sleep(0.15)
-            # now that we just show a black background,
-            # it makes no sense to waste time by fading in
-            # shutter.fade_in()
-            shutter.hard_in()
+        # seems that we need slightly more time than .05 to raise the window
+        #sleep(0.05)
+        #sleep(0.1)
+        sleep(0.15)
+        # now that we just show a black background,
+        # it makes no sense to waste time by fading in
+        # shutter.fade_in()
+        shutter.hard_in()
 
-            if self.player:
-                self.player.start()
+        if self.player:
+            self.player.start()
 
-            #arch = machine()
-            ### For Raspberry Pi
-            #if arch == "armv6l":
-            #    logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % self.asset["uri"])
-            #    omxplayer = "omxplayer"
-            #    omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(self.asset["uri"])]
-            #    run = subprocess.call(omxplayer_args, stdout=True)
-            #    logging.debug(run)
-            #
-            #    if run != 0:
-            #        logging.debug("Unclean exit: " + str(run))
-            #
-            #    # Clean up after omxplayer
-            #    omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
-            #    if path.isfile(omxplayer_logfile):
-            #        remove(omxplayer_logfile)
-            #
-            ### For x86
-            #elif arch == "x86_64" or arch == "x86_32":
-            #    logging.debug('Displaying video %s. Detected x86. Using mplayer.' % self.asset["uri"])
-            #    mplayer = "mplayer"
-            #    run = subprocess.call([mplayer, "-fs", "-nosound", str(self.asset["uri"]) ], stdout=False)
-            #    if run != 0:
-            #        logging.debug("Unclean exit: " + str(run))
+        #arch = machine()
+        ### For Raspberry Pi
+        #if arch == "armv6l":
+        #    logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % self.asset["uri"])
+        #    omxplayer = "omxplayer"
+        #    omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(self.asset["uri"])]
+        #    run = subprocess.call(omxplayer_args, stdout=True)
+        #    logging.debug(run)
+        #
+        #    if run != 0:
+        #        logging.debug("Unclean exit: " + str(run))
+        #
+        #    # Clean up after omxplayer
+        #    omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
+        #    if path.isfile(omxplayer_logfile):
+        #        remove(omxplayer_logfile)
+        #
+        ### For x86
+        #elif arch == "x86_64" or arch == "x86_32":
+        #    logging.debug('Displaying video %s. Detected x86. Using mplayer.' % self.asset["uri"])
+        #    mplayer = "mplayer"
+        #    run = subprocess.call([mplayer, "-fs", "-nosound", str(self.asset["uri"]) ], stdout=False)
+        #    if run != 0:
+        #        logging.debug("Unclean exit: " + str(run))
 
     def wait():
         if self.player:
@@ -519,6 +522,8 @@ browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzb
 browser = Browser(resolution)
 browser2 = Browser(resolution)
 browser2.lowerwindow()
+browser.iconifywindow()
+browser2.iconifywindow()
 player_bin = '/usr/bin/omxplayer'
 omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
 omxplayer_old_logfile = path.join(getenv('HOME'), 'omxplayer.old.log')
@@ -526,7 +531,9 @@ omxplayer_old_logfile = path.join(getenv('HOME'), 'omxplayer.old.log')
 if show_splash:
     # FIXME can/should we deal with splash page as a special (synthesized) asset?
     browser.show("http://127.0.0.1:8080/splash_page")
+    browser.raisewindow()
     swap_browser()
+    sleep(0.15)
     shutter.fade_in()
     time_to_wait = 15 # was 60
 else:
