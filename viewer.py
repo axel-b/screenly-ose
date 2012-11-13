@@ -127,7 +127,7 @@ class Browser(object):
                 word = l.split(' ', 3)[1]
                 self.uzbl_pid = word.strip('[]')
                 break
-        
+
         # sync_spawn /bin/bash -c "echo $UZBL_XID"
         # EVENT [20546] COMMAND_EXECUTED sync_spawn  '/bin/bash' '-c' 'echo $UZBL_XID'
         # 20971556
@@ -272,10 +272,10 @@ class Scheduler(object):
                     except:
                         web_status = 0
                 if web_status == 200:
-                    logging.debug('Web content appears to be available. Proceeding.')  
+                    logging.debug('Web content appears to be available. Proceeding.')
                     logging.debug('got asset'+str(next_asset))
                     return Asset(next_asset)
-                else: 
+                else:
                     logging.debug('Received non-200 status %d (or file not found if local) from %s. Skipping.' % (web_status, url))
                     pass
             else:
@@ -359,9 +359,9 @@ def generate_asset_list():
         else:
             playlist[i]['fade-color'] = 'white'
         i = i + 1
-    
+
     return (playlist, deadline)
-    
+
 class Asset(object):
     def __init__(self, asset):
         self.asset = asset
