@@ -388,9 +388,8 @@ class BrowserAsset(BaseAsset):
 
     def prepare(self):
             # load this in browser, not browser2, because we just swapped them
-            browser.show(next_asset.asset["uri"])
-            # next_asset.prefetch()
-            #next_asset.prefetched = True
+            browser.show(self.asset["uri"])
+            #self.prefetched = True
 
     def start(self):
             #if not self.prefetched:
@@ -405,6 +404,7 @@ class BrowserAsset(BaseAsset):
             shutter.fade_in()
             browser.iconifywindow()
             self.start = time()
+
     def wait(self):
         remaining = (self.start + int(self.asset["duration"]) - time())
         logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
@@ -415,19 +415,17 @@ class BrowserAsset(BaseAsset):
 class PlayerAsset(BaseAsset):
     def __init__(self):
         super(BrowserAsset, self, *args, **kwargs).__init(*args, **kwargs)
-        #self.prefetched = False
         self.player = None
+        #self.prefetched = False
 
     def prepare(self):
             self.player = Player(self.asset["uri"])
-            #next_asset.prefetched = True
+            #self.prefetched = True
 
     def start(self):
             # view_video(self.asset["uri"], self.asset["fade-color"])
-            arch = machine()
 
             #if not self.prefetched:
-            #    browser.show(black_video_background_page)
             #    self.player = Player(self.asset["uri"])
             #    self.prefetched = True
 
@@ -446,6 +444,7 @@ class PlayerAsset(BaseAsset):
             if self.player:
                 self.player.start()
 
+            #arch = machine()
             ### For Raspberry Pi
             #if arch == "armv6l":
             #    logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % self.asset["uri"])
@@ -536,7 +535,8 @@ else:
 cur = time()
 scheduler = Scheduler()
 asset = scheduler.get_next_asset()
-asset.prepare()
+if asset:
+    asset.prepare()
 
 remaining = (cur + time_to_wait) - time()
 if remaining > 0:
@@ -554,11 +554,14 @@ while True:
         logging.info('Playlist is empty. Going to sleep.')
         sleep(5)
         next_asset  = scheduler.get_next_asset()
+        if next_asset:
+            next_asset.prepare()
     else:
         logging.info('show asset %s' % asset.name())
         asset.start()
         next_asset  = scheduler.get_next_asset()
-        next_asset.prepare()
+        if next_asset:
+            next_asset.prepare()
         asset.wait()
 
     asset = next_asset
