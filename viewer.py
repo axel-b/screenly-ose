@@ -62,15 +62,12 @@ class Player(object):
     def __init__(self, uri):
         # player_args = player_bin + ['-s', uri]
         player_args = player_bin + [uri]
-        # self.player = subprocess.Popen(player_args, bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        # FIXME remove hardoded path (NOTE must be complete absolute path)
         self.player = pexpect.spawn('%s %s' % ('/usr/bin/omxplayer', uri))
-        #logging.info('Player started. Running as PID %d.' % self.player.pid)
         logging.info('Player started.')
 
         self.player.send('p')
         logging.debug('Player init written command')
-        #self.player.stdin.flush()
-        #logging.debug('Player init flushed command')
 
         # wait for  Subtitle count
         while True:
@@ -87,19 +84,8 @@ class Player(object):
     def start(self):
         self.player.send('p')
         logging.debug('Player start written command')
-        #self.player.stdin.flush()
-        #logging.debug('Player start flushed command')
 
     def wait(self):
-        #while True:
-        #    #logging.debug('Player wait in loop')
-        #    l = self.player.readline()
-        #    logging.debug('Player wait read line: "%s"' % l)
-        #    if not l:
-        #        logging.debug('Player wait read eof')
-        #        break
-        #    logging.debug('Player wait read line: "%s"' % l)
-        #self.player.wait()
         logging.debug('Player waiting for eof on process')
         self.player.expect(pexpect.EOF, timeout=None)
         logging.debug('Player waiting seen eof on process')
@@ -156,24 +142,6 @@ class Browser(object):
                 logging.debug('Browser init read line(should be windowid in decimal): "%s"' % l)
                 self.windowID = l.strip()
                 break
-
-        #sleep(5)  # give browser time to open window
-        #wmctrl = subprocess.Popen(['wmctrl', '-l'], bufsize=-1, stdin=None, stdout=subprocess.PIPE)
-        #lines = wmctrl.stdout.readlines()
-        ##logging.debug('Browser wmctrl read #lines: "%d"' % len(lines))
-        #self.windowID = ''
-        #searchString = "<" + str(self.uzbl_pid) + ">" 
-        ##logging.debug('Browser wmctrl looking for "%s"' % searchString)
-        #for l in lines:
-        #    #logging.debug('Browser wmctrl read line: "%s"' % l)
-        #    #if searchString in l:
-        #    #    logging.info('found id')
-        #    #if "Uzbl browser" in l:
-        #    #    logging.info('found Uzbl')
-        #    if searchString in l and "Uzbl browser" in l:
-        #        logging.info('found all')
-        #        self.windowID = l.split(' ', 2)[0]
-        #        break
         logging.info('Browser loaded. Window id %s.' % self.windowID)
         logging.debug('Browser init done')
 
@@ -458,16 +426,8 @@ class Asset(object):
             #    browser.show(black_video_background_page)
             #    self.prefetched = True
 
-            #shutter.hard_in()
-            #sleep(2)
-
-            # browser.reload()
-            #browser2.lowerwindow()
-            #browser.raisewindow()
-            #browser.iconifywindow()
             swap_browser()
             browser.iconifywindow()
-            # sleep(2)
 
             # seems that we need slightly more time than .05 to raise the window
             #sleep(0.05)
@@ -477,7 +437,6 @@ class Asset(object):
             # it makes no sense to waste time by fading in
             # shutter.fade_in()
             shutter.hard_in()
-            # sleep(5)
 
             if player:
                 player.start()
