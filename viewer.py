@@ -194,31 +194,6 @@ class Browser(object):
         logging.debug('Browser %s show "%s" done' % (self.windowID, uri))
         return result
 
-    def reload(self):
-        logging.debug('Browser %s reload "%s" ...' % (self.windowID, self.uri))
-        self.browser.stdin.write('reload\n')
-        logging.debug('Browser %s reload written command' % self.windowID)
-        self.browser.stdin.flush()
-        logging.debug('Browser %s reload flushed command' % self.windowID)
-        result = True
-        while True:
-            #logging.debug('Browser reload in loop')
-            l = self.browser.stdout.readline()
-            #logging.debug('Browser reload read line: "%s"' % l)
-            if "LOAD_ERROR" in l:
-                logging.debug('Browser %s reload load error line: "%s"' % (self.windowID, l))
-                result = False
-                break
-            elif "LOAD_FINISH '" in l and  self.uri + "'" in l:
-                logging.debug('Browser %s reload load finish line: "%s"' % (self.windowID, l))
-                result = True
-                break
-        # logging.debug('Browser %s reload "%s" sleep' % (self.windowID, self.uri))
-        # seems to be necessary; does it take time for uzbl to update screen after loading page?
-        # sleep(0.2)
-        logging.debug('Browser %s reload "%s" done' % (self.windowID, self.uri))
-        return result
-
 class Shutter(object):
     # FIXME we only look at stdout of fade program;
     # instead, we should also watch its stderr.
