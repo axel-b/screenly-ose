@@ -350,19 +350,6 @@ def generate_asset_list():
         from random import shuffle
         shuffle(playlist)
 
-    # associate fade-(out-)color with each asset in playlist,
-    # based on the mime-type of the asset succeding (after) it;
-    # we might allow user to associate colors with assets in web-interface,
-    # for now: all video: black; anything else: white
-    i = 0
-    nplaylist = len(playlist)
-    while i < nplaylist:
-        if "video" in playlist[(i+1)%nplaylist]['mimetype']:
-            playlist[i]['fade-color'] = 'black'
-        else:
-            playlist[i]['fade-color'] = 'white'
-        i = i + 1
-
     return (playlist, deadline)
 
 class BaseAsset(object):
@@ -375,11 +362,14 @@ class BaseAsset(object):
     def start(self):
         raise NotImplementedError
 
-    def wait(self):
+    def wait(self, color):
         raise NotImplementedError
 
     def name(self):
         return self.asset["name"]
+
+    def fade_color(self):
+        raise NotImplementedError
 
 class BrowserAsset(BaseAsset):
     def __init__(self, *args, **kwargs):
@@ -411,12 +401,15 @@ class BrowserAsset(BaseAsset):
         browser.iconifywindow()
         self.starttime = time()
 
-    def wait(self):
+    def wait(self, color):
         remaining = (self.starttime + int(self.asset["duration"]) - time())
         logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
         if remaining > 0:
             sleep(remaining)
-        shutter.fade_to(self.asset["fade-color"])
+        shutter.fade_to(color)
+
+    def fade_color(self):
+        return 'white'
  
 class PlayerAsset(BaseAsset):
     def __init__(self, *args, **kwargs):
@@ -476,10 +469,13 @@ class PlayerAsset(BaseAsset):
         #    if run != 0:
         #        logging.debug("Unclean exit: " + str(run))
 
-    def wait(self):
+    def wait(self, color):
         if self.player:
             self.player.wait()
         shutter.hard_to_black()
+
+    def fade_color(self):
+        return 'black'
 
 def swap_browser():
     global browser
@@ -549,13 +545,16 @@ scheduler = Scheduler()
 asset = scheduler.get_next_asset()
 if asset:
     asset.prepare()
+    fade_color = asset.fade_color()
+else:
+    fade_color = 'black'
 
 remaining = (cur + time_to_wait) - time()
 if remaining > 0:
     sleep(remaining)
 
 if show_splash and asset:
-    shutter.fade_to(asset.asset["fade-color"])
+    shutter.fade_to(fade_color)
 
 # Infinit loop. 
 logging.debug('Entering infinite loop.')
@@ -574,6 +573,9 @@ while True:
         next_asset  = scheduler.get_next_asset()
         if next_asset:
             next_asset.prepare()
-        asset.wait()
+            fade_color = next_asset.fade_color()
+        else:
+            fade_color = 'black'
+        asset.wait(fade_color)
 
     asset = next_asset
