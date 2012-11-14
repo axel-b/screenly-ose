@@ -384,13 +384,13 @@ class BaseAsset(object):
 class BrowserAsset(BaseAsset):
     def __init__(self, *args, **kwargs):
         super(BrowserAsset, self).__init__(*args, **kwargs)
-        self.start = time() # or should we initialize to 0 or -1?
+        self.starttime = time() # or should we initialize to 0 or -1?
         #self.prefetched = False
 
     def prepare(self):
-        load this in browser, not browser2, because we just swapped them
+        #load this in browser, not browser2, because we just swapped them
         browser.show(self.asset["uri"])
-        self.start = time() # or should we initialize to 0 or -1?
+        self.starttime = time() # or should we initialize to 0 or -1?
         #self.prefetched = True
 
     def start(self):
@@ -402,13 +402,14 @@ class BrowserAsset(BaseAsset):
         # seems that we need slightly more time than .05 to raise the window
         #sleep(0.05)
         #sleep(0.075)
-        sleep(0.15)
+        #sleep(0.15)
+        sleep(0.2)
         shutter.fade_in()
         browser.iconifywindow()
-        self.start = time()
+        self.starttime = time()
 
     def wait(self):
-        remaining = (self.start + int(self.asset["duration"]) - time())
+        remaining = (self.starttime + int(self.asset["duration"]) - time())
         logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
         if remaining > 0:
             sleep(remaining)
@@ -416,7 +417,7 @@ class BrowserAsset(BaseAsset):
  
 class PlayerAsset(BaseAsset):
     def __init__(self, *args, **kwargs):
-        super(BrowserAsset, self).__init__(*args, **kwargs)
+        super(PlayerAsset, self).__init__(*args, **kwargs)
         self.player = None
         #self.prefetched = False
 
@@ -438,7 +439,8 @@ class PlayerAsset(BaseAsset):
         # seems that we need slightly more time than .05 to raise the window
         #sleep(0.05)
         #sleep(0.1)
-        sleep(0.15)
+        #sleep(0.15)
+        sleep(0.2)
         # now that we just show a black background,
         # it makes no sense to waste time by fading in
         # shutter.fade_in()
@@ -472,7 +474,7 @@ class PlayerAsset(BaseAsset):
         #    if run != 0:
         #        logging.debug("Unclean exit: " + str(run))
 
-    def wait():
+    def wait(self):
         if self.player:
             self.player.wait()
         shutter.hard_to_black()
@@ -533,7 +535,8 @@ if show_splash:
     browser.show("http://127.0.0.1:8080/splash_page")
     browser.raisewindow()
     swap_browser()
-    sleep(0.15)
+    #sleep(0.15)
+    sleep(0.2)
     shutter.fade_in()
     time_to_wait = 15 # was 60
 else:
