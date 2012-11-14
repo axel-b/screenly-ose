@@ -388,15 +388,18 @@ class BrowserAsset(BaseAsset):
         #self.prefetched = False
 
     def prepare(self):
+        if "image" in self.asset["mimetype"]:
+            url = html_templates.image_page(self.asset["uri"], self.asset["name"])
+        else:  # or should we check for mimetype "web" and fail in else case?
+            url = self.asset["uri"]
         #load this in browser, not browser2, because we just swapped them
-        browser.show(self.asset["uri"])
+        browser.show(url)
         self.starttime = time() # or should we initialize to 0 or -1?
         #self.prefetched = True
 
     def start(self):
         #if not self.prefetched:
-        #    browser.show(self.asset["uri"])
-        #    self.prefetched = True
+        #    self.prepare()
         browser.raisewindow()
         swap_browser()
         # seems that we need slightly more time than .05 to raise the window
@@ -429,8 +432,7 @@ class PlayerAsset(BaseAsset):
         # view_video(self.asset["uri"], self.asset["fade-color"])
 
         #if not self.prefetched:
-        #    self.player = Player(self.asset["uri"])
-        #    self.prefetched = True
+        #    self.prepare()
 
         # browser is already/still iconified
         swap_browser()
