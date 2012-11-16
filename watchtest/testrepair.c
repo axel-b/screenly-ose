@@ -1,23 +1,21 @@
+#define _XOPEN_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
 #include <errno.h>
 #include <math.h>
-
-
-
-//       int fstat(int fd, struct stat *buf);
 
 char * watchfile = "/tmp/screenly.watchdog";
 char * repaircommand = "/home/pi/screenly/testrepair/repaircommand";
 int mx = 15 * 60;
 int slack = 5 * 60;
 
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	int fd;
 	struct stat st;
@@ -63,11 +61,11 @@ void main(int argc, char **argv)
 		curtime = time(0);
 		remaining = deadline - curtime;
 		diff = slack + remaining;
-		fprintf(stdout, "read: %f, duration: %d, mtime: %d, deadline: %d, curtime: %d, remaining: %d, diff: %d\n", cvt, duration, mtime, deadline, curtime, remaining, diff);
+		fprintf(stdout, "read: %f, duration: %ld, mtime: %ld, deadline: %ld, curtime: %ld, remaining: %ld, diff: %ld\n", cvt, (long int)duration, (long int)mtime, (long int)deadline, (long int)curtime, (long int)remaining, (long int)diff);
 		if (diff >= 0) {
 			exit(0);
 		}
-		fprintf(stdout, "error diff negative: %d\n", diff);
+		fprintf(stdout, "error diff negative: %ld\n", diff);
 		exit(4);
 	} else if (argc == 3 && strcmp(argv[1], "repair") == 0) {
 		fprintf(stdout, "repairing\n");
