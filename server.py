@@ -33,7 +33,9 @@ import bottlesession
 config_defaults = {'username':'', 'password':''}
 
 # when ssl certificate and key files are given, use https; otherwise, use http
-config_defaults.update({'sslcert':'', 'sslkey':''})
+# even when ssl certificate and key files are given, sslchain is optional
+# e.g. for self-signed certificate
+config_defaults.update({'sslcert':'', 'sslkey':'', 'sslchain':None})
 
 # Get config file
 config = ConfigParser.ConfigParser(config_defaults)
@@ -59,9 +61,10 @@ logapp = TransLogger(bottle_app())
 # decide whether to use https or http
 sslcert = config.get('main', 'sslcert')
 sslkey = config.get('main', 'sslkey')
+sslchain = config.get('main', 'sslchain')
 if sslcert and sslkey:
     proto = 'https'
-    CherryPyWSGIServer.ssl_adapter = BuiltinSSLAdapter(sslcert, sslkey, None)
+    CherryPyWSGIServer.ssl_adapter = BuiltinSSLAdapter(sslcert, sslkey, sslchain)
 else:
     proto = 'http'
 print 'using %s via %s server' % (proto, server)
