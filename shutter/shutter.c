@@ -89,18 +89,23 @@ static VC_DISPMANX_ALPHA_T alpha = { DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX
                              0, /*alpha 0->255*/
                              0 };
 
-float totalTime = .4; //sec
+//float totalTime = .4; //sec
+//
+//float delay = totalTime/2;
+////float stepDelay = .05 / 128; // ((totalTime-delay)/2)/256;
+//float stepDelay = ((totalTime-delay)/2)/51;
+////float stepDelay = .05 / 256; // ((totalTime-delay)/2)/256;
 
-float delay = 2; // totalTime/2;
-//float step = .05 / 128; // ((totalTime-delay)/2)/256;
-float step = .025 / 128; // ((totalTime-delay)/2)/256;
-//float step = .05 / 256; // ((totalTime-delay)/2)/256;
+//halfTime has to be expressed as nanoseconds
+long halfTimeNano = 400*1000*1000; // 400 ms
 
 void hard_out(RECT_VARS_T *vars, int color);
 void hard_in(RECT_VARS_T *vars);
 void fade_out(RECT_VARS_T *vars, int color);
 void fade_in(RECT_VARS_T *vars);
 void disconnect(RECT_VARS_T *vars);
+
+static struct timespec stepDelay;
 
 int main(int argc, char**argv)
 {
@@ -110,6 +115,9 @@ int main(int argc, char**argv)
 
     vars = &gRectVars;
     vars->connected = 0;
+
+    stepDelay.tv_sec = 0;
+    stepDelay.tv_nsec = halfTimeNano / 51;
 
     bcm_host_init();
 
@@ -286,6 +294,38 @@ int create_overlay(RECT_VARS_T *vars, int color)
 }
 
 
+void fade(RECT_VARS_T *vars, int min, int max, int step, struct timespec* delay)
+{
+    int             ret;
+
+    while(alpha.opacity + step <= max && alpha.opacity + step >= min) {
+
+        //fprintf(stderr, "%s: %d %d Sleeping for 1 seconds...\n", program, i, alpha.opacity );
+    	nanosleep( delay, 0);
+    	alpha.opacity += step;
+	
+        vars->update = vc_dispmanx_update_start( 10 );
+        if( ! vars->update ) {
+            fprintf(stderr, "%s: cannot start fade update\n", program);
+            return;
+        }
+    	vc_dispmanx_element_change_attributes( vars->update,
+					   vars->element,
+					   (1<<1),
+					   2500,
+                                           alpha.opacity,
+                                                &dst_rect,
+                                                &src_rect,
+                                                vars->resource,
+                                                VC_IMAGE_ROT0 );
+    	ret = vc_dispmanx_update_submit_sync( vars->update );
+    	if( ret != 0 ) {
+            fprintf(stderr, "%s: cannot sync fade update\n", program);
+            return;
+        }
+    }
+}
+
 void hard_out(RECT_VARS_T *vars, int color)
 {
     if (vars->connected) {
@@ -302,8 +342,6 @@ void hard_out(RECT_VARS_T *vars, int color)
 
 void fade_out(RECT_VARS_T *vars, int color)
 {
-    int             ret;
-
     if (vars->connected) {
 	fprintf(stderr, "%s: already connected, not fading out again\n", program);
 	return;
@@ -314,34 +352,7 @@ void fade_out(RECT_VARS_T *vars, int color)
         return;
     }
     vars->connected  = 1;
-
-    while(alpha.opacity < 254) {
-
-        //fprintf(stderr, "%s: %d %d Sleeping for 1 seconds...\n", program, i, alpha.opacity );
-    	sleep( step );
-    	alpha.opacity += 2;
-	
-        vars->update = vc_dispmanx_update_start( 10 );
-        if( ! vars->update ) {
-            fprintf(stderr, "%s: cannot start fade-out update\n", program);
-            return;
-        }
-    	vc_dispmanx_element_change_attributes( vars->update,
-					   vars->element,
-					   (1<<1),
-					   2500,
-                                           alpha.opacity,
-                                                &dst_rect,
-                                                &src_rect,
-                                                vars->resource,
-                                                VC_IMAGE_ROT0 );
-    	ret = vc_dispmanx_update_submit_sync( vars->update );
-    	if( ret != 0 ) {
-            fprintf(stderr, "%s: cannot sync fade-out update\n", program);
-            return;
-        }
-    }
-
+    fade(vars, 0, 255, +5, &stepDelay);
 }
 
 void hard_in(RECT_VARS_T *vars)
@@ -355,38 +366,11 @@ void hard_in(RECT_VARS_T *vars)
 
 void fade_in(RECT_VARS_T *vars)
 {
-    int             ret;
-
     if (!vars->connected) {
 	fprintf(stderr, "%s: not connected, not fading in\n", program);
 	return;
     }
-    while(alpha.opacity > 1) {
-
-        //fprintf(stderr, "%s: %d %d Sleeping for 1 seconds...\n", program, i, alpha.opacity );
-    	sleep( step );
-    	alpha.opacity -= 2;
-	
-        vars->update = vc_dispmanx_update_start( 10 );
-        if( ! vars->update ) {
-            fprintf(stderr, "%s: cannot start fade-in update\n", program);
-            return;
-        }
-    	vc_dispmanx_element_change_attributes( vars->update,
-					   vars->element,
-					   (1<<1),
-					   2500,
-                                           alpha.opacity,
-                                                &dst_rect,
-                                                &src_rect,
-                                                vars->resource,
-                                                VC_IMAGE_ROT0 );
-    	ret = vc_dispmanx_update_submit_sync( vars->update );
-    	if( ret != 0 ) {
-            fprintf(stderr, "%s: cannot sync fade-in update\n", program);
-            return;
-        }
-    }
+    fade(vars, 0, 255, -5, &stepDelay);
     disconnect(vars);
 }
 
