@@ -570,6 +570,7 @@ while True:
     else:
         logging.info('show asset %s' % asset.name())
         asset.start()
+        sleep(1) # allow time to start
         next_asset  = scheduler.get_next_asset()
         if next_asset:
             next_asset.prepare()
