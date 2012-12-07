@@ -409,7 +409,10 @@ class BrowserAsset(BaseAsset):
         shutter.fade_to(color)
 
     def fade_color(self):
-        return 'white'
+        if "image" in self.asset["mimetype"]:
+            return 'black'
+        else:  # or should we check for mimetype "web" and fail in else case?
+            return 'white'
  
 class PlayerAsset(BaseAsset):
     def __init__(self, *args, **kwargs):
