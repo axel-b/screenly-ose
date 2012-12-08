@@ -68,6 +68,13 @@ static VC_IMAGE_TYPE_T type = VC_IMAGE_RGB565;
 
 static char* program = "shutter";
 
+unsigned long RGB888_to_RGB565(unsigned long rgb)
+{
+	return (((rgb >> 19) & 0x1f) << 11) |
+               (((rgb >> 10) & 0x3f) <<  5) |
+               (((rgb >>  3) & 0x1f)      );
+}
+
 static void FillRect( VC_IMAGE_TYPE_T type, void *image, int pitch, int aligned_height, int x, int y, int w, int h, int val )
 {
     int         row;
@@ -169,6 +176,12 @@ int main(int argc, char**argv)
 		fade_out(vars, color);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
+	} else if (strncmp(s, "fade-to-color", strlen("fade-to-color")) == 0) {
+		int color = strtol(s+strlen("fade-to-color")+1, 0, 0);
+		color = RGB888_to_RGB565(color);
+		fade_out(vars, color);
+		fprintf(stdout, "done\n");
+		fflush(stdout);
 	} else if (strncmp(s, "hard-in", strlen("hard-in")) == 0) {
 		hard_in(vars);
 		fprintf(stdout, "done\n");
@@ -180,6 +193,12 @@ int main(int argc, char**argv)
 		fflush(stdout);
 	} else if (strncmp(s, "hard-to-black", strlen("hard-to-black")) == 0) {
 		int color = 0x0000; // black
+		hard_out(vars, color);
+		fprintf(stdout, "done\n");
+		fflush(stdout);
+	} else if (strncmp(s, "hard-to-color", strlen("hard-to-color")) == 0) {
+		int color = strtol(s+strlen("hard-to-color")+1, 0, 0);
+		color = RGB888_to_RGB565(color);
 		hard_out(vars, color);
 		fprintf(stdout, "done\n");
 		fflush(stdout);
