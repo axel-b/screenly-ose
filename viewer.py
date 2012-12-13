@@ -9,11 +9,12 @@ __email__ = "vpetersson@wireload.net"
 
 import sqlite3, ConfigParser
 from sys import exit
-from requests import get 
+from requests import get, head
 from platform import machine 
 from os import path, getenv, remove, makedirs
 from os import stat as os_stat, utime
-from subprocess import Popen, call 
+import subprocess
+import pexpect
 import html_templates
 from datetime import datetime
 from time import sleep, time
@@ -22,10 +23,10 @@ from glob import glob
 from stat import S_ISFIFO
 
 # Initiate logging
-logging.basicConfig(level=logging.INFO,
-                    filename='/tmp/screenly_viewer.log',
-                    format='%(asctime)s %(message)s',
-                    datefmt='%a, %d %b %Y %H:%M:%S')
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(message)s')
+#,
+#                    filename='/tmp/screenly_viewer.log',
 
 # Silence urllib info messages ('Starting new HTTP connection')
 # that are triggered by the remote url availability check in view_web
@@ -56,6 +57,204 @@ def str_to_bol(string):
     else:
         return False
 
+class Player(object):
+    def __init__(self, uri):
+        # do not use '-s' flag (not needed, will give lots of unneeded output)
+        self.player = pexpect.spawn('%s %s' % (player_bin, uri))
+        logging.info('Player started.')
+
+        self.player.send('p')
+        logging.debug('Player init written command')
+
+        # wait for  Subtitle count
+        while True:
+            #logging.debug('Player init in loop')
+            l = self.player.readline()
+            if not l:
+                logging.debug('Player init read eof')
+                break
+            logging.debug('Player init read line: "%s"' % l)
+            if "Subtitle count" in l:
+                break
+        logging.debug('Player init done')
+
+    def start(self):
+        self.player.send('p')
+        logging.debug('Player start written command')
+
+    def wait(self):
+        logging.debug('Player waiting for eof on process')
+        self.player.expect(pexpect.EOF, timeout=None)
+        logging.debug('Player waiting seen eof on process')
+        self.player.terminate(force=True)
+        logging.debug('Player waiting cleanup')
+        # Clean up after omxplayer
+        if path.isfile(omxplayer_old_logfile):
+            remove(omxplayer_old_logfile)
+        elif path.isfile(omxplayer_logfile):
+            remove(omxplayer_logfile)
+        logging.debug('Player done')
+
+class Browser(object):
+    def __init__(self, resolution):
+        self.uri = None
+        logging.debug('Browser init...')
+        browser_args = browser_bin + ["-c", "-", "--print-events", "--geometry=" + resolution]
+        self.browser = subprocess.Popen(browser_args, bufsize=-1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        logging.info('Browser loaded. Running as PID %d.' % self.browser.pid)
+
+        # wait for FOCUS_GAINED
+        while True:
+            #logging.debug('Browser init in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser init read line: "%s"' % l)
+            # EVENT [2785]
+            if "FOCUS_GAINED" in l:
+                break
+        self.browser.stdin.write('set show_status=0\n')
+        logging.debug('Browser init written command')
+        self.browser.stdin.flush()
+        logging.debug('Browser init flushed command')
+        while True:
+            #logging.debug('Browser init in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser init read line: "%s"' % l)
+            # EVENT [2785]
+            if "VARIABLE_SET show_status int 0" in l:
+                word = l.split(' ', 3)[1]
+                self.uzbl_pid = word.strip('[]')
+                break
+
+        # sync_spawn /bin/bash -c "echo $UZBL_XID"
+        # EVENT [20546] COMMAND_EXECUTED sync_spawn  '/bin/bash' '-c' 'echo $UZBL_XID'
+        # 20971556
+        self.browser.stdin.write('sync_spawn /bin/bash -c "echo $UZBL_XID"\n')
+        self.browser.stdin.flush()
+        logging.debug('Browser init flushed spawn command')
+        while True:
+            l = self.browser.stdout.readline()
+            logging.debug('Browser init read line (should be EVENT): "%s"' % l)
+            if "COMMAND_EXECUTED sync_spawn" in l:
+                l = self.browser.stdout.readline()
+                logging.debug('Browser init read line(should be windowid in decimal): "%s"' % l)
+                self.windowID = l.strip()
+                break
+        logging.info('Browser loaded. Window id %s.' % self.windowID)
+        logging.debug('Browser init done')
+
+    def raisewindow(self):
+        logging.debug('Browser %s raisewindow ...' % self.windowID )
+        run = subprocess.call(['xwit', '-pop', '-id', self.windowID], stdout=False)
+        #run = subprocess.call(['xwit', '-sync', '-raise', '-id', self.windowID], stdout=False)
+        #run = subprocess.call(['wmctrl', '-i', '-a', self.windowID], stdout=False)
+        logging.debug(run)
+        if run != 0:
+            logging.debug("Unclean wmctrl raise exit: " + str(run))
+
+    def lowerwindow(self):
+        logging.debug('Browser %s lowerwindow ...' % self.windowID )
+        run = subprocess.call(['xwit', '-sync', '-lower', '-id', self.windowID], stdout=False)
+        logging.debug(run)
+        if run != 0:
+            logging.debug("Unclean wmctrl lower exit: " + str(run))
+
+    def iconifywindow(self):
+        logging.debug('Browser %s iconifywindow ...' % self.windowID )
+        run = subprocess.call(['xwit', '-iconify', '-id', self.windowID], stdout=False)
+        logging.debug(run)
+        if run != 0:
+            logging.debug("Unclean wmctrl iconify exit: " + str(run))
+
+    def show(self, uri):
+        self.uri = uri
+        logging.debug('Browser %s show "%s" ...' % (self.windowID, uri))
+        self.browser.stdin.write('set uri=%s\n' % uri)
+        logging.debug('Browser %s show written command' % self.windowID)
+        self.browser.stdin.flush()
+        logging.debug('Browser %s show flushed command' % self.windowID)
+        result = True
+        while True:
+            #logging.debug('Browser show in loop')
+            l = self.browser.stdout.readline()
+            #logging.debug('Browser show read line: "%s"' % l)
+            if "LOAD_ERROR" in l:
+                logging.debug('Browser %s show load error line: "%s"' % (self.windowID, l))
+                result = False
+                break
+            elif "LOAD_FINISH '" in l and  uri + "'" in l:
+                logging.debug('Browser %s show load finish line: "%s"' % (self.windowID, l))
+                result = True
+                break
+        # logging.debug('Browser %s show "%s" sleep' % (self.windowID, uri))
+        # seems to be necessary; does it take time for uzbl to update screen after loading page?
+        # sleep(0.2)
+        logging.debug('Browser %s show "%s" done' % (self.windowID, uri))
+        return result
+
+class Shutter(object):
+    # FIXME we only look at stdout of fade program;
+    # instead, we should also watch its stderr.
+    # moreover, what if something goes wrong and we hang forever in readline() ?
+    # should we use a timer to be robust against that?
+    def __init__(self):
+        self.shutter = None
+        shutter_args = [shutter_bin]
+        self.shutter = subprocess.Popen(shutter_args, bufsize=1, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    # color must either be 'black' or 'white'
+    # or something like '0xFF0000' (for red), '0x0000FF' (for blue),
+    # or '0x292929' (very dark non-black),  '0xCCCCCC' (grey)
+    def fade_to(self, color):
+        if color == 'white':
+            self.fade_to_white()
+        elif color == 'black':
+            self.fade_to_black()
+        else:
+            self.fade_to_color(color)
+
+    def fade_to_black(self):
+        self.issue_command('fade-to-black\n', 'fade_to_black')
+
+    def fade_to_white(self):
+        self.issue_command('fade-to-white\n', 'fade_to_white')
+
+    def fade_to_color(self, color):
+        self.issue_command('fade-to-color %s\n' % color, 'fade_to_color')
+
+    def fade_in(self):
+        self.issue_command('fade-in\n', 'fade_in')
+
+    def hard_to(self, color):
+        if color == 'white':
+            self.hard_to_white()
+        elif color == 'black':
+            self.hard_to_black()
+        else:
+            self.hard_to_color(color)
+
+    def hard_to_black(self):
+        self.issue_command('hard-to-black\n', 'hard_to_black')
+
+    def hard_to_white(self):
+        self.issue_command('hard-to-white\n', 'hard_to_white')
+
+    def hard_to_color(self, color):
+        self.issue_command('hard-to-color %s\n' % color, 'hard_to_color')
+
+    def hard_in(self):
+        self.issue_command('hard-in\n', 'hard_in')
+
+    def issue_command(self, command, function_name):
+        if not self.shutter:
+                return
+        logging.debug('%s start' % function_name)
+        self.shutter.stdin.write(command)
+        self.shutter.stdin.flush()
+        l = self.shutter.stdout.readline()
+        # logging.debug('%s read "%s"' % (function_name, l))
+        logging.debug('%s read end' % function_name)
+
+
 class Scheduler(object):
     def __init__(self, *args, **kwargs):
         logging.debug('Scheduler init')
@@ -67,12 +266,40 @@ class Scheduler(object):
         logging.debug('get_next_asset after refresh')
         if self.nassets == 0:
             return None
-        idx = self.index
-        self.index = (self.index + 1) % self.nassets
-        logging.debug('get_next_asset counter %d returning asset %d of %d' % (self.counter, idx+1, self.nassets))
-        if shuffle_playlist and self.index == 0:
-            self.counter += 1
-        return self.assets[idx]
+        i = 0
+        while i < self.nassets:
+            idx = self.index
+            self.index = (self.index + 1) % self.nassets
+            logging.debug('get_next_asset counter %d returning asset %d of %d' % (self.counter, idx+1, self.nassets))
+            if shuffle_playlist and self.index == 0:
+                self.counter += 1
+            next_asset = self.assets[idx]
+            if next_asset and "web" in next_asset["mimetype"]:
+                url = next_asset["uri"]
+                web_status = 200
+                if html_folder in url and path.exists(url):
+                    web_status = 200
+                else:
+                    try:
+                        web_status = head(url).status_code
+                    except:
+                        web_status = 0
+                if web_status == 200:
+                    logging.debug('Web content appears to be available. Proceeding.')
+                    logging.debug('got asset'+str(next_asset))
+                    return BrowserAsset(next_asset)
+                else:
+                    logging.debug('Received non-200 status %d (or file not found if local) from %s. Skipping.' % (web_status, url))
+                    pass
+            elif next_asset and "image" in next_asset["mimetype"]:
+                return BrowserAsset(next_asset)
+            elif next_asset and "video" in next_asset["mimetype"]:
+                return PlayerAsset(next_asset)
+            else:
+                logging.debug('skipping None asset, or with unknown mimetype')
+                pass
+            i = i + 1
+        return None
 
     def refresh_playlist(self):
         logging.debug('refresh_playlist')
@@ -137,7 +364,7 @@ def generate_asset_list():
     if shuffle_playlist:
         from random import shuffle
         shuffle(playlist)
-    
+
     return (playlist, deadline)
 
 def watchdog():
@@ -151,109 +378,140 @@ def watchdog():
     else:
         utime(watchdog,None)
 
-def load_browser():
-    logging.info('Loading browser...')
-    browser_bin = "uzbl-browser"
-    browser_resolution = resolution
+class BaseAsset(object):
+    def __init__(self, asset):
+        self.asset = asset
 
-    if show_splash:
-        browser_load_url = "http://127.0.0.1:8080/splash_page"
-    else:
-        browser_load_url = black_page
+    def prepare(self):
+        raise NotImplementedError
 
-    browser_args = [browser_bin, "--geometry=" + browser_resolution, "--uri=" + browser_load_url]
-    browser = Popen(browser_args)
-    
-    logging.info('Browser loaded. Running as PID %d.' % browser.pid)
+    def start(self):
+        raise NotImplementedError
 
-    if show_splash:
-        # Show splash screen for 60 seconds.
-        sleep(60)
-    else:
-        # Give browser some time to start (we have seen multiple uzbl running without this)
-        sleep(10)
+    def wait(self, color):
+        raise NotImplementedError
 
-    return browser
+    def name(self):
+        return self.asset["name"]
 
-def get_fifo():
-    candidates = glob('/tmp/uzbl_fifo_*')
-    for file in candidates:
-        if S_ISFIFO(os_stat(file).st_mode):
-            return file
-        else:
-            return None    
-    
-def disable_browser_status():
-    logging.debug('Disabled status-bar in browser')
-    f = open(fifo, 'a')
-    f.write('set show_status = 0\n')
-    f.close()
+    def fade_color(self):
+        raise NotImplementedError
 
+class BrowserAsset(BaseAsset):
+    def __init__(self, *args, **kwargs):
+        super(BrowserAsset, self).__init__(*args, **kwargs)
+        self.starttime = time() # or should we initialize to 0 or -1?
+        #self.prefetched = False
 
-def view_image(image, name, duration):
-    logging.debug('Displaying image %s for %s seconds.' % (image, duration))
-    url = html_templates.image_page(image, name)
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % url)
-    f.close()
-    
-    sleep(int(duration))
-    
-    f = open(fifo, 'a')
-    f.write('set uri = %s\n' % black_page)
-    f.close()
-    
-def view_video(video):
-    arch = machine()
+    def prepare(self):
+        if "image" in self.asset["mimetype"]:
+            url = html_templates.image_page(self.asset["uri"], self.asset["name"])
+        else:  # or should we check for mimetype "web" and fail in else case?
+            url = self.asset["uri"]
+        #load this in browser, not browser2, because we just swapped them
+        browser.show(url)
+        self.starttime = time() # or should we initialize to 0 or -1?
+        #self.prefetched = True
 
-    ## For Raspberry Pi
-    if arch == "armv6l":
-        logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % video)
-        omxplayer = "omxplayer"
-        omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(video)]
-        run = call(omxplayer_args, stdout=True)
-        logging.debug(run)
+    def start(self):
+        #if not self.prefetched:
+        #    self.prepare()
+        browser.raisewindow()
+        swap_browser()
+        # seems that we need slightly more time than .05 to raise the window
+        #sleep(0.05)
+        #sleep(0.075)
+        #sleep(0.15)
+        sleep(0.2)
+        shutter.fade_in()
+        browser.iconifywindow()
+        self.starttime = time()
 
-        if run != 0:
-            logging.debug("Unclean exit: " + str(run))
+    def wait(self, color):
+        remaining = (self.starttime + int(self.asset["duration"]) - time())
+        logging.debug('remaining of duration %s: sleep time: %f' % (self.asset["duration"], remaining))
+        if remaining > 0:
+            sleep(remaining)
+        shutter.fade_to(color)
 
-        # Clean up after omxplayer
-        omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
-        if path.isfile(omxplayer_logfile):
-            remove(omxplayer_logfile)
+    def fade_color(self):
+        if "image" in self.asset["mimetype"]:
+            return 'black'
+        else:  # or should we check for mimetype "web" and fail in else case?
+            return 'white'
+ 
+class PlayerAsset(BaseAsset):
+    def __init__(self, *args, **kwargs):
+        super(PlayerAsset, self).__init__(*args, **kwargs)
+        self.player = None
+        #self.prefetched = False
 
-    ## For x86
-    elif arch == "x86_64" or arch == "x86_32":
-        logging.debug('Displaying video %s. Detected x86. Using mplayer.' % video)
-        mplayer = "mplayer"
-        run = call([mplayer, "-fs", "-nosound", str(video) ], stdout=False)
-        if run != 0:
-            logging.debug("Unclean exit: " + str(run))
+    def prepare(self):
+        self.player = Player(self.asset["uri"])
+        #self.prefetched = True
 
-def view_web(url, duration):
+    def start(self):
+        # view_video(self.asset["uri"], self.asset["fade-color"])
 
-    # If local web page, check if the file exist. If remote, check if it is
-    # available.
-    if (html_folder in url and path.exists(url)):
-        web_resource = 200
-    else:
-        web_resource = get(url).status_code
+        #if not self.prefetched:
+        #    self.prepare()
 
-    if web_resource == 200:
-        logging.debug('Web content appears to be available. Proceeding.')  
-        logging.debug('Displaying url %s for %s seconds.' % (url, duration))
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % url)
-        f.close()
-    
-        sleep(int(duration))
-    
-        f = open(fifo, 'a')
-        f.write('set uri = %s\n' % black_page)
-        f.close()
-    else: 
-        logging.debug('Received non-200 status (or file not found if local) from %s. Skipping.' % (url))
-        pass
+        # browser is already/still iconified
+        swap_browser()
+        browser.iconifywindow()
+
+        # seems that we need slightly more time than .05 to raise the window
+        #sleep(0.05)
+        #sleep(0.1)
+        #sleep(0.15)
+        sleep(0.2)
+        # now that we just show a black background,
+        # it makes no sense to waste time by fading in
+        # shutter.fade_in()
+        shutter.hard_in()
+
+        if self.player:
+            self.player.start()
+
+        #arch = machine()
+        ### For Raspberry Pi
+        #if arch == "armv6l":
+        #    logging.debug('Displaying video %s. Detected Raspberry Pi. Using omxplayer.' % self.asset["uri"])
+        #    omxplayer = "omxplayer"
+        #    omxplayer_args = [omxplayer, "-o", audio_output, "-w", str(self.asset["uri"])]
+        #    run = subprocess.call(omxplayer_args, stdout=True)
+        #    logging.debug(run)
+        #
+        #    if run != 0:
+        #        logging.debug("Unclean exit: " + str(run))
+        #
+        #    # Clean up after omxplayer
+        #    omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
+        #    if path.isfile(omxplayer_logfile):
+        #        remove(omxplayer_logfile)
+        #
+        ### For x86
+        #elif arch == "x86_64" or arch == "x86_32":
+        #    logging.debug('Displaying video %s. Detected x86. Using mplayer.' % self.asset["uri"])
+        #    mplayer = "mplayer"
+        #    run = subprocess.call([mplayer, "-fs", "-nosound", str(self.asset["uri"]) ], stdout=False)
+        #    if run != 0:
+        #        logging.debug("Unclean exit: " + str(run))
+
+    def wait(self, color):
+        if self.player:
+            self.player.wait()
+        shutter.hard_to_black()
+
+    def fade_color(self):
+        return 'black'
+
+def swap_browser():
+    global browser
+    global browser2
+    b = browser2
+    browser2 = browser
+    browser = b
 
 # Get config values
 configdir = path.join(getenv('HOME'), config.get('main', 'configdir'))
@@ -273,48 +531,82 @@ html_folder = '/tmp/screenly_html/'
 if not path.isdir(html_folder):
    makedirs(html_folder)
 
-# Set up HTML templates
-black_page = html_templates.black_page()
+# FIXME do not hardcode shutter executable location
+shutter_bin = path.join(getenv('HOME'), 'screenly', 'shutter', 'shutter.bin')
+shutter = Shutter()
+
+# FIXME specify shutter timing here, or via config,
+# instead of hard-coded in the view_foo functions, as it is now.
+
+shutter.fade_to_black()
+logging.debug('Xsetroot black...' )
+run = subprocess.call(['xsetroot', '-solid', 'black'], stdout=False)
+logging.debug(run)
+if run != 0:
+    logging.debug("Unclean xsetroot exit: " + str(run))
+
 
 # Fire up the browser
-run_browser = load_browser()
+browser_bin = [path.join(getenv('HOME'), 'screenly', 'filter-for-uzbl.py'), 'uzbl']
+browser = Browser(resolution)
+browser2 = Browser(resolution)
+browser2.lowerwindow()
+browser.iconifywindow()
+browser2.iconifywindow()
+player_bin = '/usr/bin/omxplayer'
+omxplayer_logfile = path.join(getenv('HOME'), 'omxplayer.log')
+omxplayer_old_logfile = path.join(getenv('HOME'), 'omxplayer.old.log')
 
-logging.debug('Getting browser PID.')
-browser_pid = run_browser.pid
+if show_splash:
+    # FIXME can/should we deal with splash page as a special (synthesized) asset?
+    browser.show("http://127.0.0.1:8080/splash_page")
+    browser.raisewindow()
+    swap_browser()
+    #sleep(0.15)
+    sleep(0.2)
+    shutter.fade_in()
+    time_to_wait = 15 # was 60
+else:
+    time_to_wait = 1
 
-logging.debug('Getting FIFO.')
-fifo = get_fifo()
-
-# Bring up the blank page (in case there are only videos).
-logging.debug('Loading blank page.')
-view_web(black_page, 1)
-
-logging.debug('Disable the browser status bar')
-disable_browser_status()
-
+cur = time()
 scheduler = Scheduler()
+asset = scheduler.get_next_asset()
+if asset:
+    asset.prepare()
+    fade_color = asset.fade_color()
+else:
+    fade_color = 'black'
+
+remaining = (cur + time_to_wait) - time()
+if remaining > 0:
+    sleep(remaining)
+
+if show_splash and asset:
+    shutter.fade_to(fade_color)
 
 # Infinit loop. 
 logging.debug('Entering infinite loop.')
 while True:
 
-    asset = scheduler.get_next_asset()
-    logging.debug('got asset'+str(asset))
-
     if asset == None:
         # The playlist is empty, go to sleep.
         logging.info('Playlist is empty. Going to sleep.')
         sleep(5)
+        next_asset  = scheduler.get_next_asset()
+        if next_asset:
+            next_asset.prepare()
     else:
-        logging.info('show asset %s' % asset["name"])
-
+        logging.info('show asset %s' % asset.name())
         watchdog()
-
-        if "image" in asset["mimetype"]:
-            view_image(asset["uri"], asset["name"], asset["duration"])
-        elif "video" in asset["mimetype"]:
-            view_video(asset["uri"])
-        elif "web" in asset["mimetype"]:
-            view_web(asset["uri"], asset["duration"])
+        asset.start()
+        sleep(1) # allow time to start
+        next_asset  = scheduler.get_next_asset()
+        if next_asset:
+            next_asset.prepare()
+            fade_color = next_asset.fade_color()
         else:
-            print "Unknown MimeType, or MimeType missing"
+            fade_color = 'black'
+        asset.wait(fade_color)
+
+    asset = next_asset
