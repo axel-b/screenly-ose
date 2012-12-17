@@ -108,6 +108,9 @@ class Browser(object):
             #logging.debug('Browser init in loop')
             l = self.browser.stdout.readline()
             #logging.debug('Browser init read line: "%s"' % l)
+            if not l:
+                logging.debug('Browser init waiting for FOCUS_GAINED: eof from browser stdout')
+                exit(0)
             # EVENT [2785]
             if "FOCUS_GAINED" in l:
                 break
@@ -119,6 +122,9 @@ class Browser(object):
             #logging.debug('Browser init in loop')
             l = self.browser.stdout.readline()
             #logging.debug('Browser init read line: "%s"' % l)
+            if not l:
+                logging.debug('Browser init waiting for VARIABLE_SET: eof from browser stdout')
+                exit(0)
             # EVENT [2785]
             if "VARIABLE_SET show_status int 0" in l:
                 word = l.split(' ', 3)[1]
@@ -134,6 +140,9 @@ class Browser(object):
         while True:
             l = self.browser.stdout.readline()
             logging.debug('Browser init read line (should be EVENT): "%s"' % l)
+            if not l:
+                logging.debug('Browser init waiting for COMMAND_EXECUTED: eof from browser stdout')
+                exit(0)
             if "COMMAND_EXECUTED sync_spawn" in l:
                 l = self.browser.stdout.readline()
                 logging.debug('Browser init read line(should be windowid in decimal): "%s"' % l)
@@ -177,6 +186,9 @@ class Browser(object):
             #logging.debug('Browser show in loop')
             l = self.browser.stdout.readline()
             #logging.debug('Browser show read line: "%s"' % l)
+            if not l:
+                logging.debug('Browser show waiting for LOAD_ERROR or LOAD_FINISH: eof from browser stdout')
+                exit(0)
             if "LOAD_ERROR" in l:
                 logging.debug('Browser %s show load error line: "%s"' % (self.windowID, l))
                 result = False
