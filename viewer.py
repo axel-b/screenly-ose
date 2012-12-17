@@ -71,6 +71,9 @@ class Browser(object):
             #logging.debug('Browser init in loop')
             l = self.browser.stdout.readline()
             #logging.debug('Browser init read line: "%s"' % l)
+            if not l:
+                logging.debug('Browser init waiting for VARIABLE_SET: eof from browser stdout')
+                exit(0)
             if "VARIABLE_SET show_status int 0" in l:
                 break
         logging.debug('Browser init done')
@@ -86,6 +89,9 @@ class Browser(object):
             #logging.debug('Browser show in loop')
             l = self.browser.stdout.readline()
             #logging.debug('Browser show read line: "%s"' % l)
+            if not l:
+                logging.debug('Browser show waiting for LOAD_ERROR or LOAD_FINISH: eof from browser stdout')
+                exit(0)
             if "LOAD_ERROR" in l:
                 result = False
                 break
